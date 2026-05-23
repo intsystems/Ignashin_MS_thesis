@@ -1,40 +1,61 @@
-|test| |codecov| |docs|
-
-.. |test| image:: https://github.com/intsystems/ProjectTemplate/workflows/test/badge.svg
-    :target: https://github.com/intsystems/ProjectTemplate/tree/master
-    :alt: Test status
-    
-.. |codecov| image:: https://img.shields.io/codecov/c/github/intsystems/ProjectTemplate/master
-    :target: https://app.codecov.io/gh/intsystems/ProjectTemplate
-    :alt: Test coverage
-    
-.. |docs| image:: https://github.com/intsystems/ProjectTemplate/workflows/docs/badge.svg
-    :target: https://intsystems.github.io/ProjectTemplate/
-    :alt: Docs status
-
-
-.. class:: center
-
-    :Название исследуемой задачи: Мое название работы
-    :Тип научной работы: M1P/НИР/CoIS
-    :Автор: Имя Отчество Фамилия
-    :Научный руководитель: степень, Фамилия Имя Отчество
-    :Научный консультант(при наличии): степень, Фамилия Имя Отчество
+<table>
+    <tr>
+        <td align="center"> <b> Название исследуемой задачи </b> </td>
+        <td> Frank--Wolfe algorithm in machine learning </td>
+    </tr>
+    <tr>
+        <td align="center"> <b> Тип научной работы </b> </td>
+        <td> ВКР </td>
+    </tr>
+    <tr>
+        <td align="center"> <b> Автор </b> </td>
+        <td> Игнашин Игорь Николаевич </td>
+    </tr>
+    <tr>
+        <td align="center"> <b> Научный руководитель </b> </td>
+        <td> кандидат ф.-м. наук, Грабовой Андрей Олегович </td>
+    </tr>
+</table>
 
 Abstract
 ========
 
-Purus sit amet luctus venenatis lectus magna fringilla. Condimentum id venenatis a condimentum vitae sapien. Auctor neque vitae tempus quam pellentesque nec nam aliquam. Eget egestas purus viverra accumsan in. Nam aliquam sem et tortor. Donec et odio pellentesque diam volutpat commodo. Odio pellentesque diam volutpat commodo sed egestas. Sit amet dictum sit amet justo. Pellentesque sit amet porttitor eget. Imperdiet sed euismod nisi porta lorem mollis aliquam ut. Quis varius quam quisque id diam vel quam elementum. Ornare lectus sit amet est placerat in. Vulputate dignissim suspendisse in est ante. Elit sed vulputate mi sit amet mauris. Egestas sed tempus urna et pharetra pharetra. Viverra tellus in hac habitasse platea dictumst vestibulum rhoncus.
+Работа посвящена развитию алгоритма Frank--Wolfe и его модификаций для задач
+выпуклой оптимизации, возникающих в машинном обучении, транспортном
+моделировании и распределенной оптимизации. Основное внимание уделяется
+проекционно-свободным методам, которые сохраняют линейный оракул вместо
+проекции, но улучшают практическую сходимость за счет памяти о направлениях,
+стохастического выбора блоков и распределенного взаимодействия агентов.
 
-Research publications
-===============================
-1. 
+Для транспортной модели Бекмана предложены N-conjugate Frank--Wolfe как
+обобщение CFW/BFW на несколько прошлых направлений и Weighted Fukushima
+Frank--Wolfe как модификация FFW с экспоненциальным сглаживанием. Идеи
+сопряженных направлений перенесены на задачи машинного обучения без явного
+вычисления гессиана: информация о кривизне аппроксимируется разностями
+градиентов. Для CFW доказана оценка по минимальному зазору Frank--Wolfe,
+сохраняющая порядок классического FW.
 
-Presentations at conferences on the topic of research
-================================================
-1. 
+Также предложен SOFW как частный случай Block-Coordinate Frank--Wolfe для
+транспортной задачи с блоками по OD-парам и доказана оценка ожидаемой
+сходимости для одиночного и батчевого выбора блоков. Для распределенной
+постановки предложен DBCFW, объединяющий блочный линейный оракул, консенсус и
+отслеживание градиента; для него получена оценка сходимости порядка O(1/t).
+Экспериментальная часть включает транспортные сети, логистическую регрессию на
+Mushrooms и MNIST, а также сравнение FW-модификаций по зазору Frank--Wolfe и
+времени работы.
+
+Materials
+=========
+
+1. PDF текста работы: `paper/MasterThesis.pdf <paper/MasterThesis.pdf>`_.
+2. PDF слайдов: `slides/thesis_slides.pdf <slides/thesis_slides.pdf>`_.
+3. Исходник текста работы: `paper/MasterThesis.tex <paper/MasterThesis.tex>`_.
+4. Исходник слайдов: `slides/thesis_slides.tex <slides/thesis_slides.tex>`_.
 
 Software modules developed as part of the study
 ======================================================
-1. A python package *mylib* with all implementation `here <https://github.com/intsystems/ProjectTemplate/tree/master/src>`_.
-2. A code with all experiment visualisation `here <https://github.comintsystems/ProjectTemplate/blob/master/code/main.ipynb>`_. Can use `colab <http://colab.research.google.com/github/intsystems/ProjectTemplate/blob/master/code/main.ipynb>`_.
+
+1. A python code with Frank--Wolfe modifications for machine learning:
+   https://github.com/ThunderstormXX/FW-in-ML
+2. A python code with transport modeling and Frank--Wolfe experiments:
+   https://github.com/ThunderstormXX/mmo_tm

@@ -1,0 +1,731 @@
+\newpage
+
+\section{Сопряженный Frank--Wolfe в задачах машинного обучения}
+\label{sec:cfw-ml}
+
+В этой главе модификации Frank--Wolfe с сопряженными направлениями переносятся из транспортной постановки в задачи машинного обучения.
+Рассматривается гладкая выпуклая задача
+\begin{equation}
+    f(x)\to\min_{x\in\cX},
+    \qquad
+    f:\R^d\to\R,
+    \label{eq:ml-constrained-problem}
+\end{equation}
+где $\cX$ является компактным выпуклым множеством.
+Такая постановка возникает, например, когда регуляризованная задача машинного обучения переписывается как задача с ограничением на норму параметров.
+
+Если исходная задача имеет вид
+\[
+    f(x)+\mu g(x)\to\min_x,
+\]
+то при подходящем выборе радиуса она может быть рассмотрена как
+\[
+    f(x)\to\min_{g(x)\leq R}.
+\]
+Для ограничений вида $\norm{x}_1\leq R$ линейный оракул Frank--Wolfe вычисляется проще, чем проекция на соответствующее множество.
+Поэтому FW и его модификации естественно применимы к обучению моделей с ограничениями на параметры.
+
+\subsection{Базовый FW для гладкой выпуклой задачи}
+
+На итерации $k$ алгоритм решает линейную подзадачу
+\begin{equation}
+    s_k^{FW}
+    =
+    \argmin_{s\in\cX}
+    \inner{\nabla f(x_k)}{s},
+    \label{eq:ml-fw-lmo}
+\end{equation}
+после чего делает шаг
+\[
+    d_k=s_k^{FW}-x_k,
+    \qquad
+    x_{k+1}=x_k+\gamma_kd_k.
+\]
+Длина шага может задаваться теоретической последовательностью
+\[
+    \gamma_k=\frac{2}{k+2},
+\]
+или выбираться линейным поиском
+\[
+    \gamma_k=
+    \argmin_{\gamma\in[0,1]}
+    f(x_k+\gamma d_k).
+\]
+
+\begin{algorithm}
+\caption{Frank--Wolfe для задачи машинного обучения}
+\begin{algorithmic}
+\REQUIRE компактное выпуклое множество $\cX$, начальная точка $x_0\in\cX$
+\STATE $k\gets 0$
+\REPEAT
+\STATE $s_k^{FW}\gets\argmin_{s\in\cX}\inner{\nabla f(x_k)}{s}$
+\STATE $d_k\gets s_k^{FW}-x_k$
+\STATE $\gamma_k\gets\argmin_{\gamma\in[0,1]}f(x_k+\gamma d_k)$
+\STATE $x_{k+1}\gets x_k+\gamma_kd_k$
+\STATE $k\gets k+1$
+\UNTIL{достигнут критерий остановки}
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{CFW без явного вычисления гессиана}
+
+В транспортной задаче гессиан модели Бекмана диагонален, поэтому вычисление коэффициента CFW по формуле~\eqref{eq:cfw-alpha-traffic} дешево.
+В задачах машинного обучения явное вычисление гессиана может быть слишком дорогим.
+Поэтому используется приближение произведения гессиана на вектор через разность градиентов.
+
+Пусть
+\[
+    d_{k-1}=s_{k-1}-x_{k-1},
+    \qquad
+    x_k=x_{k-1}+\gamma_{k-1}d_{k-1}.
+\]
+Тогда
+\[
+    s_{k-1}-x_{k-1}
+    =
+    \frac{x_k-x_{k-1}}{\gamma_{k-1}},
+\]
+и произведение гессиана на предыдущее направление приближенно выражается как
+\[
+    \nabla^2 f(x_k)(s_{k-1}-x_{k-1})
+    \approx
+    \frac{\nabla f(x_k)-\nabla f(x_{k-1})}{\gamma_{k-1}}.
+\]
+После сокращения $\gamma_{k-1}$ получается формула
+\begin{equation}
+    \alpha =
+    \frac{
+        (x_k-s_{k-1})^T(\nabla f(x_k)-\nabla f(x_{k-1}))
+    }{
+        (s_k^{FW}-s_{k-1})^T(\nabla f(x_k)-\nabla f(x_{k-1}))
+    }.
+    \label{eq:cfw-alpha-grad-diff}
+\end{equation}
+Эта формула не требует явного построения гессиана и хорошо согласуется с реализацией в библиотеках автоматического дифференцирования.
+
+\begin{algorithm}
+\caption{Conjugate Frank--Wolfe для общей гладкой задачи}
+\begin{algorithmic}
+\REQUIRE $x_0\in\cX$, параметр $\alpha_0\in(0,1]$
+\STATE выполнить один шаг FW и получить $x_1$, $s_0$
+\STATE $k\gets 1$
+\REPEAT
+\STATE $s_k^{FW}\gets\argmin_{s\in\cX}\inner{\nabla f(x_k)}{s}$
+\IF{$\inner{\nabla f(x_k)}{s_k^{FW}}=\inner{\nabla f(x_k)}{x_k}$}
+\STATE остановить алгоритм
+\ENDIF
+\STATE вычислить $\alpha$ по формуле~\eqref{eq:cfw-alpha-grad-diff}
+\STATE $\alpha\gets\min\{1,\max\{\alpha_0,\alpha\}\}$
+\STATE $s_k\gets\alpha s_k^{FW}+(1-\alpha)s_{k-1}$
+\STATE $d_k\gets s_k-x_k$
+\STATE $\gamma_k\gets\argmin_{\gamma\in[0,1]}f(x_k+\gamma d_k)$
+\STATE $x_{k+1}\gets x_k+\gamma_kd_k$
+\STATE $k\gets k+1$
+\UNTIL{достигнут критерий остановки}
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Сходимость CFW}
+
+Для анализа используется стандартное предположение о выпуклости и гладкости.
+
+\begin{assumption}
+\label{ass:ml-smooth}
+Множество $\cX\subset\R^d$ выпукло и компактно.
+Функция $f:\R^d\to\R$ выпукла и непрерывно дифференцируема, а ее градиент липшицев на $\cX$ с константой $L$:
+\[
+    0
+    \leq
+    f(x')-f(x)-\inner{\nabla f(x)}{x'-x}
+    \leq
+    \frac{L}{2}\norm{x'-x}_2^2,
+    \qquad
+    x,x'\in\cX.
+\]
+\end{assumption}
+
+Зазор Frank--Wolfe в точке $x_k$ равен
+\[
+    g_k=
+    \inner{\nabla f(x_k)}{x_k-s_k^{FW}}.
+\]
+Обозначим
+\[
+    h_0=f(x_0)-f(x^\ast),
+    \qquad
+    R=\Max_{x,y\in\cX}\norm{x-y}_2,
+    \qquad
+    A=LR^2.
+\]
+
+\begin{lemma}
+\label{lem:cfw-descent-direction}
+Пусть $d_k$ является направлением шага CFW, а длина шага выбирается точным линейным поиском на отрезке $[0,1]$.
+Тогда
+\[
+    \inner{\nabla f(x_{k+1})}{d_k}\leq 0.
+\]
+\end{lemma}
+
+\begin{proof}
+Докажем утверждение по индукции.
+На нулевой итерации направление CFW совпадает с направлением FW:
+\[
+    d_0=d_0^{FW}=s_0^{FW}-x_0.
+\]
+Рассмотрим одномерную функцию
+\[
+    \varphi(\gamma)=f(x_0+\gamma d_0)
+\]
+на отрезке $[0,1]$.
+Если $x_0$ не является решением, то по условию оптимальности для выпуклой задачи
+\[
+    \varphi'(0)=
+    \inner{\nabla f(x_0)}{s_0^{FW}-x_0}<0.
+\]
+Следовательно, точный линейный поиск выбирает $\gamma_0>0$.
+Так как $\varphi$ выпукла, условие оптимальности одномерной задачи
+\[
+    \gamma_0\in\argmin_{\gamma\in[0,1]}\varphi(\gamma)
+\]
+дает
+\[
+    \varphi'(\gamma_0)\leq 0,
+    \qquad
+    \inner{\nabla f(x_1)}{d_0}\leq 0.
+\]
+Если же $x_0$ уже является решением, алгоритм останавливается, и утверждение не требуется.
+
+Пусть теперь для предыдущей итерации выполнено
+\[
+    \inner{\nabla f(x_k)}{d_{k-1}}\leq 0.
+\]
+Для направления CFW имеем
+\[
+    d_k
+    =
+    \alpha d_k^{FW}
+    +
+    (1-\alpha)(s_{k-1}-x_k)
+    =
+    \alpha d_k^{FW}
+    +
+    (1-\alpha)(1-\gamma_{k-1})d_{k-1}.
+\]
+Здесь $\alpha\in[\alpha_0,1]$.
+По определению линейного оракула
+\[
+    \inner{\nabla f(x_k)}{d_k^{FW}}
+    =
+    \inner{\nabla f(x_k)}{s_k^{FW}-x_k}
+    =
+    -g_k\leq 0,
+\]
+а второе слагаемое не положительно по предположению индукции.
+Значит,
+\[
+    \inner{\nabla f(x_k)}{d_k}
+    \leq 0.
+\]
+Если $g_k>0$, то производная одномерной функции
+\[
+    \varphi_k(\gamma)=f(x_k+\gamma d_k)
+\]
+в нуле отрицательна или равна нулю только в вырожденном случае.
+Точный линейный поиск по выпуклой функции снова дает
+\[
+    \inner{\nabla f(x_{k+1})}{d_k}
+    =
+    \varphi_k'(\gamma_k)
+    \leq 0.
+\]
+Тем самым индукция завершена.
+\end{proof}
+
+\begin{theorem}
+\label{thm:cfw-rate}
+Пусть выполнено предположение~\ref{ass:ml-smooth}.
+Тогда для CFW с параметром $\alpha_0\in(0,1]$ справедлива оценка
+\[
+    g_N^\ast
+    =
+    \Min_{1\leq k\leq N}g_k
+    \leq
+    \frac{\max\{2h_0,A\}}{\alpha_0\sqrt{N+1}}.
+\]
+\end{theorem}
+
+\begin{proof}
+Так как $\gamma_k$ выбирается точным линейным поиском, для любого $\gamma\in[0,1]$
+выполнено
+\[
+    f(x_{k+1})
+    =
+    \min_{\eta\in[0,1]}f(x_k+\eta d_k)
+    \leq
+    f(x_k+\gamma d_k).
+\]
+Используя $L$-гладкость, получаем
+\[
+    f(x_{k+1})
+    \leq
+    f(x_k)
+    +
+    \gamma\inner{\nabla f(x_k)}{d_k}
+    +
+    \frac{\gamma^2L}{2}\norm{d_k}_2^2.
+\]
+Далее
+\[
+    d_k
+    =
+    \alpha_k d_k^{FW}
+    +
+    (1-\alpha_k)(1-\gamma_{k-1})d_{k-1}.
+\]
+По лемме~\ref{lem:cfw-descent-direction}, примененной к предыдущему шагу,
+\[
+    \inner{\nabla f(x_k)}{d_{k-1}}\leq 0.
+\]
+Следовательно,
+\[
+    \inner{\nabla f(x_k)}{d_k}
+    \leq
+    \alpha_k\inner{\nabla f(x_k)}{d_k^{FW}}
+    =
+    -\alpha_k g_k
+    \leq
+    -\alpha_0 g_k.
+\]
+Так как $x_k,s_k\in\cX$ и $R$ является диаметром $\cX$,
+\[
+    \norm{d_k}_2\leq R,
+    \qquad
+    A=LR^2.
+\]
+Следовательно,
+\[
+    f(x_{k+1})
+    \leq
+    f(x_k)
+    +
+    \Min_{\gamma\in[0,1]}
+    \left\{
+        -\alpha_0\gamma g_k
+        +
+        \frac{\gamma^2A}{2}
+    \right\}.
+\]
+Минимум в правой части достигается либо во внутренней точке,
+либо на правой границе отрезка.
+Поэтому
+\[
+    f(x_{k+1})-f(x_k)
+    \leq
+    -\frac{\alpha_0g_k}{2}
+    \min\left\{
+        \frac{\alpha_0g_k}{A},
+        1
+    \right\}.
+\]
+Суммируя по $k=0,\ldots,N$ и используя $f(x^\ast)\leq f(x_{N+1})$, получаем
+\[
+    h_0
+    \geq
+    \sum_{k=0}^{N}
+    \frac{\alpha_0g_k}{2}
+    \min\left\{
+        \frac{\alpha_0g_k}{A},
+        1
+    \right\}.
+\]
+Так как $g_N^\ast=\min_{0\leq k\leq N}g_k$, то
+\[
+    h_0
+    \geq
+    (N+1)
+    \frac{\alpha_0g_N^\ast}{2}
+    \min\left\{
+        \frac{\alpha_0g_N^\ast}{A},
+        1
+    \right\}.
+\]
+Если $\alpha_0g_N^\ast\leq A$, то
+\[
+    \alpha_0g_N^\ast
+    \leq
+    \sqrt{\frac{2Ah_0}{N+1}}
+    \leq
+    \frac{\max\{2h_0,A\}}{\sqrt{N+1}}.
+\]
+Если $\alpha_0g_N^\ast>A$, то
+\[
+    \alpha_0g_N^\ast
+    \leq
+    \frac{2h_0}{N+1}
+    \leq
+    \frac{\max\{2h_0,A\}}{\sqrt{N+1}}.
+\]
+Объединяя два случая, получаем утверждение теоремы.
+\end{proof}
+
+Оценка отличается от стандартной оценки FW только множителем $1/\alpha_0$.
+Это означает, что CFW сохраняет асимптотический порядок сходимости FW по зазору Frank--Wolfe, а практическое ускорение связано с более удачным выбором направления.
+
+\subsection{NFW в машинном обучении}
+
+Метод Bi-conjugate Frank--Wolfe обобщается до N-conjugate Frank--Wolfe, где новое
+направление строится с учетом нескольких предыдущих направлений.
+Предполагается, что предыдущие направления сопряжены между собой относительно нового
+гессиана:
+\[
+    d_{k-m}^T\nabla^2f(x_k)d_{k-n}=0,
+    \qquad
+    m\neq n,\quad m,n\in\{1,\ldots,N\}.
+\]
+Новая точка направления записывается как выпуклая комбинация текущей точки линейного
+оракула и нескольких предыдущих точек:
+\[
+    s_k
+    =
+    \alpha_0s_k^{FW}
+    +
+    \sum_{m=1}^{N}\alpha_ms_{k-m}.
+\]
+Коэффициенты выбираются так, чтобы новое направление было сопряжено с предыдущими:
+\[
+    d_{k-m}^T\nabla^2f(x_k)d_k=0,
+    \qquad m=1,\ldots,N.
+\]
+
+Обозначим $H^k=\nabla^2f(x_k)$ и
+\[
+    A_{k-m}=d_{k-m}^TH^kd_k^{FW},
+    \qquad
+    B_{k-m}=d_{k-m}^TH^kd_{k-m}.
+\]
+Если на текущей итерации используется $N_{\mathrm{curr}}$ предыдущих направлений, то
+сначала вычисляется
+\[
+    \beta_{N_{\mathrm{curr}}}
+    =
+    \frac{-A_{k-N_{\mathrm{curr}}}}
+    {B_{k-N_{\mathrm{curr}}}(1-\gamma_{k-N_{\mathrm{curr}}})},
+\]
+а затем последовательно для $m=N_{\mathrm{curr}}-1,\ldots,1$:
+\[
+    \beta_m
+    =
+    \frac{-A_{k-m}}{B_{k-m}(1-\gamma_{k-m})}
+    +
+    \frac{\gamma_{k-m}}{1-\gamma_{k-m}}
+    \sum_{n=m+1}^{N_{\mathrm{curr}}}\beta_n.
+\]
+После этого
+\[
+    \alpha_m=\beta_m\alpha_0,
+    \qquad
+    \alpha_0=
+    \frac{1}{1+\sum_{i=1}^{N_{\mathrm{curr}}}\beta_i}.
+\]
+
+Для ML-задач точное вычисление $H^k$ обычно слишком дорого.
+Поэтому, как и в CFW, используется приближение произведений гессиана через разности
+градиентов.
+Для предыдущего направления $d_{k-m}=s_{k-m}-x_{k-m}$ применяется оценка
+\[
+    \nabla f(s_{k-m})-\nabla f(x_{k-m})
+    \approx
+    \nabla^2f(x_{k-m})(s_{k-m}-x_{k-m}).
+\]
+Если гессиан за несколько итераций меняется умеренно, то отношение, входящее в формулы
+для коэффициентов, можно заменить выражением
+\[
+    \frac{A_{k-m}}{B_{k-m}}
+    \approx
+    \frac{
+        (\nabla f(s_{k-m})-\nabla f(x_{k-m}))^Td_k^{FW}
+    }{
+        (\nabla f(s_{k-m})-\nabla f(x_{k-m}))^T(s_{k-m}-x_{k-m})
+    }.
+\]
+Так NFW сохраняет идею сопряжения с несколькими предыдущими направлениями, но не требует
+явного построения матрицы Гессе.
+
+\begin{algorithm}
+\caption{N-conjugate Frank--Wolfe для задачи машинного обучения}
+\label{alg:nfw-ml}
+\begin{algorithmic}
+\REQUIRE начальная точка $x_0\in\cX$, глубина памяти $N$, параметр $\gamma_{\max}\in[0,1]$
+\STATE выполнить начальный FW-шаг и получить $x_1$, $s_0$, $N_{\mathrm{curr}}\gets 1$
+\REPEAT
+\STATE $s_k^{FW}\gets\argmin_{s\in\cX}\inner{\nabla f(x_k)}{s}$
+\STATE вычислить коэффициенты $\alpha_0,\ldots,\alpha_{N_{\mathrm{curr}}}$
+\STATE $s_k\gets\alpha_0s_k^{FW}+\sum_{i=1}^{N_{\mathrm{curr}}}\alpha_is_{k-i}$
+\STATE $d_k\gets s_k-x_k$
+\STATE $\gamma_k\gets\argmin_{\gamma\in[0,1]}f(x_k+\gamma d_k)$
+\STATE $x_{k+1}\gets x_k+\gamma_kd_k$
+\STATE обновить $N_{\mathrm{curr}}$: увеличить до $N$ или сбросить до $1$, если $\gamma_k>\gamma_{\max}$
+\UNTIL{достигнут критерий остановки}
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Эксперименты на логистической регрессии}
+
+Эксперименты проводились на задачах бинарной классификации с логистической регрессией на наборах Mushrooms и MNIST.
+Рассматривалась задача
+\[
+    \norm{w}_1\leq R,
+\]
+а также вариант с $l_2$-регуляризацией:
+\[
+    f(w)=\operatorname{logloss}(w)+\frac{\lambda}{2}\norm{w}_2^2.
+\]
+Интерес представляло сравнение случаев, когда решение безусловной задачи лежит внутри допустимого множества, около границы или далеко вне него.
+
+\begin{table}[H]
+\centering
+\caption{$l_1$-нормы решений безусловной задачи для разных датасетов и регуляризаций.}
+\begin{tabular}{lcc}
+\toprule
+Датасет & Без регуляризации & $l_2$-регуляризация \\
+\midrule
+Mushrooms & $>1000$ & $30.5$ \\
+MNIST & $2.77$ & $0.15$ \\
+\bottomrule
+\end{tabular}
+\label{tab:cfw-ml-l1-norms}
+\end{table}
+
+\noindent\textbf{Частота настоящей сопряженности.}
+Так как коэффициент $\alpha$ в CFW проецируется на $[\alpha_0,1]$, важно понять,
+как часто алгоритм действительно строит сопряженное направление, а не просто использует
+усеченный коэффициент.
+Направление считается сопряженным в этом смысле, если неусеченное значение $\alpha$ уже
+лежит в отрезке $[\alpha_0,1]$.
+Для численной проверки использовалась нормированная величина сопряженности
+\[
+    \eta_k
+    =
+    \frac{
+        \left|d_{k-1}^T\nabla^2 f(x_k)d_k\right|
+    }{
+        \sqrt{
+            \left(d_{k-1}^T\nabla^2 f(x_k)d_{k-1}\right)
+            \left(d_k^T\nabla^2 f(x_k)d_k\right)
+        }
+    }.
+\]
+В точной арифметике для сопряженных направлений $\eta_k=0$.
+Нормировка нужна, чтобы сравнивать значения на разных итерациях независимо от масштаба
+направлений.
+На рис.~\ref{fig:cfw-ml-conjugacy-frequency} показано значение $\eta_k$ на первых ста
+итерациях CFW.
+В эксперименте примерно в $80\%$ итераций новое направление действительно оказывается
+сопряженным с предыдущим; при этом на начальных итерациях такие направления встречаются
+реже.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\textwidth]{cfw_ml/Experiment_3_fig_1.pdf}
+\caption{Частота настоящей сопряженности на первых 100 итерациях CFW.}
+\label{fig:cfw-ml-conjugacy-frequency}
+\end{figure}
+
+\noindent\textbf{Сравнение модификаций.}
+Сравнивались FW с линейным поиском, FW с теоретическим шагом, CFW и NFW при $N=2,3,4,5$.
+Во всех экспериментах для CFW использовалось $\alpha_0=0.05$.
+Критерием качества был зазор Frank--Wolfe.
+
+На рис.~\ref{fig:cfw-ml-mushrooms-12}--\ref{fig:cfw-ml-mnist-l2-34} приведены графики
+сходимости для четырех групп задач: Mushrooms без регуляризации, Mushrooms с
+$l_2$-регуляризацией, MNIST без регуляризации и MNIST с $l_2$-регуляризацией.
+Для каждого датасета рассматриваются разные радиусы ограничения $\norm{w}_1\leq R$.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.96\textwidth]{cfw_ml/Experiment_5_fig_12.pdf}
+\caption{Mushrooms без $l_2$-регуляризации: сходимость FW, CFW и NFW по FW-зазору для первых значений радиуса $R$.}
+\label{fig:cfw-ml-mushrooms-12}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.96\textwidth]{cfw_ml/Experiment_5_fig_34.pdf}
+\caption{Mushrooms без $l_2$-регуляризации: сходимость FW, CFW и NFW по FW-зазору для больших значений радиуса $R$.}
+\label{fig:cfw-ml-mushrooms-34}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.96\textwidth]{cfw_ml/Experiment_6_fig_12.pdf}
+\caption{Mushrooms с $l_2$-регуляризацией: сходимость FW, CFW и NFW по FW-зазору для первых значений радиуса $R$.}
+\label{fig:cfw-ml-mushrooms-l2-12}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.96\textwidth]{cfw_ml/Experiment_6_fig_34.pdf}
+\caption{Mushrooms с $l_2$-регуляризацией: сходимость FW, CFW и NFW по FW-зазору для больших значений радиуса $R$.}
+\label{fig:cfw-ml-mushrooms-l2-34}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.96\textwidth]{cfw_ml/Experiment_7_fig_12.pdf}
+\caption{MNIST без $l_2$-регуляризации: сходимость FW, CFW и NFW по FW-зазору для первых значений радиуса $R$.}
+\label{fig:cfw-ml-mnist-12}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.96\textwidth]{cfw_ml/Experiment_7_fig_34.pdf}
+\caption{MNIST без $l_2$-регуляризации: сходимость FW, CFW и NFW по FW-зазору для больших значений радиуса $R$.}
+\label{fig:cfw-ml-mnist-34}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.96\textwidth]{cfw_ml/Experiment_8_fig_12.pdf}
+\caption{MNIST с $l_2$-регуляризацией: сходимость FW, CFW и NFW по FW-зазору для первых значений радиуса $R$.}
+\label{fig:cfw-ml-mnist-l2-12}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.96\textwidth]{cfw_ml/Experiment_8_fig_34.pdf}
+\caption{MNIST с $l_2$-регуляризацией: сходимость FW, CFW и NFW по FW-зазору для больших значений радиуса $R$.}
+\label{fig:cfw-ml-mnist-l2-34}
+\end{figure}
+
+Полученные результаты показывают:
+\begin{enumerate}
+    \item CFW и NFW часто существенно превосходят классический FW, особенно когда решение безусловной задачи далеко от границы допустимого множества.
+    \item На Mushrooms преимущество сопряженных модификаций выражено сильнее, чем на MNIST.
+    \item При близости безусловного решения к границе $\cX$ различия между FW с линейным поиском и CFW могут уменьшаться.
+    \item Когда безусловное решение далеко от границы допустимого множества, NFW с числом предыдущих направлений больше двух часто сходится быстрее FW и CFW.
+\end{enumerate}
+
+\noindent\textbf{Экспериментальные таблицы.}
+
+В таблицах ниже приведены численные результаты.
+В каждой строке фиксируется радиус $R$ ограничения $\norm{w}_1\leq R$.
+Значения в таблице являются достигнутым FW-зазором к моменту остановки по времени;
+меньшее значение означает более качественное решение.
+Лучший результат в строке выделен зеленым.
+
+\begin{table}[H]
+\centering
+\caption{Mushrooms без $l_2$-регуляризации. Критерий -- FW-зазор.}
+\label{tab:cfw-mushrooms-full}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccccc}
+\toprule
+$R$ & FW ls & FW & CFW & NFW $N=2$ & NFW $N=3$ & NFW $N=4$ & NFW $N=5$ \\
+\midrule
+5 & $9.93\cdot10^{-4}$ & $1.54\cdot10^{-4}$ & $4.46\cdot10^{-5}$ & \textcolor{green!50!black}{$9.72\cdot10^{-10}$} & $2.11\cdot10^{-9}$ & $2.49\cdot10^{-9}$ & $5.59\cdot10^{-9}$ \\
+30 & $5.11\cdot10^{-3}$ & $2.05\cdot10^{-3}$ & $1.82\cdot10^{-3}$ & $3.19\cdot10^{-4}$ & $1.40\cdot10^{-4}$ & \textcolor{green!50!black}{$7.52\cdot10^{-5}$} & $2.72\cdot10^{-4}$ \\
+60 & $3.82\cdot10^{-3}$ & $2.11\cdot10^{-3}$ & $1.12\cdot10^{-3}$ & $1.14\cdot10^{-3}$ & \textcolor{green!50!black}{$3.38\cdot10^{-4}$} & $6.59\cdot10^{-4}$ & $3.83\cdot10^{-4}$ \\
+150 & $9.20\cdot10^{-4}$ & $3.06\cdot10^{-2}$ & $1.34\cdot10^{-4}$ & $4.06\cdot10^{-4}$ & $1.40\cdot10^{-4}$ & \textcolor{green!50!black}{$9.27\cdot10^{-5}$} & $1.47\cdot10^{-4}$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Mushrooms с $l_2$-регуляризацией. Критерий -- FW-зазор.}
+\label{tab:cfw-mushrooms-l2-full}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccccc}
+\toprule
+$R$ & FW ls & FW & CFW & NFW $N=2$ & NFW $N=3$ & NFW $N=4$ & NFW $N=5$ \\
+\midrule
+5 & $1.41\cdot10^{-3}$ & $3.71\cdot10^{-4}$ & $1.56\cdot10^{-5}$ & $4.42\cdot10^{-9}$ & \textcolor{green!50!black}{$3.30\cdot10^{-9}$} & $1.86\cdot10^{-8}$ & $4.86\cdot10^{-6}$ \\
+30 & $8.96\cdot10^{-3}$ & $1.33\cdot10^{-2}$ & $6.21\cdot10^{-3}$ & $7.13\cdot10^{-3}$ & $5.61\cdot10^{-3}$ & $8.16\cdot10^{-3}$ & \textcolor{green!50!black}{$5.48\cdot10^{-3}$} \\
+60 & $7.11\cdot10^{-3}$ & $6.69\cdot10^{-2}$ & $2.40\cdot10^{-3}$ & $2.12\cdot10^{-3}$ & $1.57\cdot10^{-3}$ & $1.13\cdot10^{-3}$ & \textcolor{green!50!black}{$9.26\cdot10^{-4}$} \\
+150 & $1.82\cdot10^{-3}$ & $5.73\cdot10^{-1}$ & \textcolor{green!50!black}{$2.06\cdot10^{-4}$} & $1.22\cdot10^{-3}$ & $1.00\cdot10^{-3}$ & $5.40\cdot10^{-4}$ & $1.34\cdot10^{-3}$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{MNIST без $l_2$-регуляризации. Критерий -- FW-зазор.}
+\label{tab:cfw-mnist-full}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccccc}
+\toprule
+$R$ & FW ls & FW & CFW & NFW $N=2$ & NFW $N=3$ & NFW $N=4$ & NFW $N=5$ \\
+\midrule
+$0.10$ & $7.48\cdot10^{-2}$ & \textcolor{green!50!black}{$1.97\cdot10^{-2}$} & $4.00\cdot10^{-2}$ & $3.87\cdot10^{-2}$ & $2.63\cdot10^{-2}$ & $2.06\cdot10^{-2}$ & $2.98\cdot10^{-2}$ \\
+$0.80$ & $5.56\cdot10^{-1}$ & $2.83$ & \textcolor{green!50!black}{$5.37\cdot10^{-1}$} & $6.45\cdot10^{-1}$ & $5.88\cdot10^{-1}$ & $6.22\cdot10^{-1}$ & $6.48\cdot10^{-1}$ \\
+$1.50$ & $1.15$ & $14.17$ & \textcolor{green!50!black}{$1.04$} & $1.25$ & $1.19$ & $1.45$ & $1.48$ \\
+$2.50$ & $1.93$ & $32.05$ & \textcolor{green!50!black}{$1.63$} & $2.33$ & $2.11$ & $2.44$ & $2.51$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{MNIST с $l_2$-регуляризацией. Критерий -- FW-зазор.}
+\label{tab:cfw-mnist-l2-full}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccccc}
+\toprule
+$R$ & FW ls & FW & CFW & NFW $N=2$ & NFW $N=3$ & NFW $N=4$ & NFW $N=5$ \\
+\midrule
+$0.01$ & $3.47\cdot10^{-3}$ & $3.38\cdot10^{-4}$ & $2.63\cdot10^{-4}$ & $1.41\cdot10^{-4}$ & $1.44\cdot10^{-4}$ & \textcolor{green!50!black}{$4.47\cdot10^{-5}$} & $5.62\cdot10^{-5}$ \\
+$0.10$ & $5.39\cdot10^{-2}$ & $5.75\cdot10^{-2}$ & $4.93\cdot10^{-2}$ & \textcolor{green!50!black}{$4.69\cdot10^{-2}$} & $4.92\cdot10^{-2}$ & $6.02\cdot10^{-2}$ & $5.01\cdot10^{-2}$ \\
+$0.20$ & $1.63\cdot10^{-1}$ & $2.68\cdot10^{-1}$ & $1.46\cdot10^{-1}$ & $1.60\cdot10^{-1}$ & \textcolor{green!50!black}{$1.42\cdot10^{-1}$} & $1.74\cdot10^{-1}$ & $1.65\cdot10^{-1}$ \\
+$0.50$ & $4.10\cdot10^{-1}$ & $2.03$ & \textcolor{green!50!black}{$3.82\cdot10^{-1}$} & $4.65\cdot10^{-1}$ & $4.28\cdot10^{-1}$ & $4.35\cdot10^{-1}$ & $4.45\cdot10^{-1}$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\noindent\textbf{Интерпретация ML-экспериментов.}
+
+На Mushrooms без регуляризации безусловное решение имеет очень большую $l_1$-норму.
+При радиусах $R=5,30,60,150$ оно находится далеко за пределами допустимого множества.
+В этом режиме траектория FW часто упирается в границу $l_1$-шара и начинает менять активные
+координаты зигзагообразно.
+Именно здесь сопряженные методы дают наиболее заметный выигрыш.
+Особенно сильный эффект виден при $R=5$, где NFW достигает зазора порядка $10^{-9}$,
+а FW остается на уровнях $10^{-4}$--$10^{-3}$.
+
+Для Mushrooms с $l_2$-регуляризацией безусловное решение имеет норму около $30.5$.
+Поэтому при $R=30$ граница близка к естественному решению задачи, а при больших радиусах
+часть ограничительного эффекта ослабевает.
+Тем не менее CFW и NFW сохраняют преимущество над FW.
+Интересно, что при $R=150$ лучшим оказывается CFW, а не NFW.
+Это показывает, что увеличение памяти не является универсально лучшим выбором:
+когда активная геометрия задачи становится менее жесткой, одного предыдущего направления
+может быть достаточно.
+
+На MNIST картина слабее.
+Без регуляризации оценочная $l_1$-норма безусловного решения равна примерно $2.77$,
+то есть часть выбранных радиусов находится близко к решению или внутри допустимой области.
+В таких условиях FW с линейным поиском и CFW/NFW становятся близкими.
+Однако даже здесь CFW часто дает лучший накопленный FW-зазор, особенно при $R=0.80,1.50,2.50$.
+С $l_2$-регуляризацией безусловное решение имеет норму около $0.15$.
+Поэтому при $R=0.01$ ограничение жесткое, и NFW с $N=4$ оказывается лучшим.
+При $R=0.50$ ограничение уже сравнительно слабое, и лучшим становится CFW.
+
+Общий вывод экспериментов таков:
+\begin{enumerate}
+    \item если безусловное решение далеко от границы $\cX$, сопряженные модификации резко ускоряют FW;
+    \item если безусловное решение лежит близко к границе или внутри множества, разница между методами уменьшается;
+    \item для простых и разреженных задач NFW с $N>2$ часто выигрывает у CFW;
+    \item для более сложных задач с плотной структурой признаков эффект сопряженности проявляется слабее;
+    \item зигзагообразность не исчезает полностью, но наступает позже, чем у классического FW.
+\end{enumerate}
+
+\subsection{Выводы по CFW in ML}
+
+CFW и NFW можно применять не только в транспортном моделировании, но и в задачах машинного обучения, если они сводятся к гладкой выпуклой оптимизации на компактном выпуклом множестве.
+Для таких задач явное вычисление гессиана не является обязательным: достаточно приближения произведения гессиана на вектор через разность градиентов.
+Теоретически CFW сохраняет порядок сходимости FW по зазору Frank--Wolfe.
+Практически же использование предыдущих направлений позволяет уменьшить зигзагообразность траектории и ускорить обучение логистической регрессии с ограничениями на параметры.

@@ -1,22 +1,8 @@
-# Sky Transport Modeling Library
+# Код к работе
 
-<!-- ![Logo](path_to_logo.png) -->
+Основные реализации и эксперименты вынесены в отдельные репозитории:
 
-## Overview
+- [ThunderstormXX/FW-in-ML](https://github.com/ThunderstormXX/FW-in-ML) -- модификации Frank-Wolfe и эксперименты для задач машинного обучения.
+- [ThunderstormXX/mmo_tm](https://github.com/ThunderstormXX/mmo_tm) -- транспортное моделирование и эксперименты с Frank-Wolfe на транспортных сетях.
 
-The Mountain Aerial Lift Transport Modeling Library is a comprehensive tool designed for simulating and analyzing the transport operations of aerial lifts in mountainous regions. This library aims to assist engineers, planners, and researchers in optimizing lift systems, improving passenger flow and efficiency in mountain transport.
-
-## Features
-
-- **Simulation of Aerial Lift Operations**: Model the behavior and performance of various types of aerial lifts.
-- **Passenger Flow Analysis**: Analyze the flow of passengers to identify bottlenecks and optimize lift capacity.
-- **Data Visualization**: Generate visual representations of lift operations, including 3D models and statistical charts.
-
-## Installation
-
-To install the dependencies, use pip:
-
-```bash
-uv venv
-uv sync
-```
+Локальные ноутбуки и черновики в этой директории оставлены как вспомогательные материалы.

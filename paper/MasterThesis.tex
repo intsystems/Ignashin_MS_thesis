@@ -1,0 +1,135 @@
+\documentclass[a4paper,14pt]{extarticle}
+
+\usepackage[T2A]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english,russian]{babel}
+
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{indentfirst}
+\usepackage{longtable}
+\usepackage{mathtools}
+\usepackage{multirow}
+\usepackage{rotating}
+\usepackage{subfig}
+\usepackage{tabularx}
+\usepackage{url}
+\usepackage{xcolor}
+
+\usepackage{geometry}
+\geometry{
+    left=2.5cm,
+    right=1.0cm,
+    top=2.0cm,
+    bottom=2.0cm
+}
+\emergencystretch=3em
+
+\graphicspath{{thesis_assets/figures/}}
+
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator{\diam}{diam}
+\DeclareMathOperator{\diag}{diag}
+
+\newtheorem{theorem}{Теорема}
+\newtheorem{lemma}[theorem]{Лемма}
+\newtheorem{definition}{Определение}[section]
+\newtheorem{proposition}[theorem]{Утверждение}
+\newtheorem{corollary}[theorem]{Следствие}
+\newtheorem{assumption}[theorem]{Предположение}
+
+\numberwithin{equation}{section}
+
+\newcommand*{\No}{No.}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\cX}{\mathcal{X}}
+\newcommand{\cC}{\mathcal{C}}
+\newcommand{\cF}{\mathcal{F}}
+\newcommand{\cE}{\mathcal{E}}
+\newcommand{\cV}{\mathcal{V}}
+\newcommand{\cP}{\mathcal{P}}
+\newcommand{\cI}{\mathcal{I}}
+\newcommand{\cD}{\mathcal{D}}
+\newcommand{\norm}[1]{\left\|#1\right\|}
+\newcommand{\inner}[2]{\left\langle #1, #2 \right\rangle}
+\newcommand{\Sum}{\sum\limits}
+\newcommand{\Max}{\max\limits}
+\newcommand{\Min}{\min\limits}
+\newcommand{\cG}{\mathcal{G}}
+\newcommand{\cO}{\mathcal{O}}
+\newcommand{\br}[1]{\left[#1\right]}
+\newcommand{\cbr}[1]{\left(#1\right)}
+\newcommand{\sqn}[1]{\norm{#1}_2^2}
+
+\floatstyle{ruled}
+\newfloat{algorithm}{H}{loa}
+\floatname{algorithm}{Алгоритм}
+\newenvironment{algorithmic}[1][]
+{\begin{minipage}{0.96\textwidth}\small\setlength{\parskip}{3pt}}
+{\end{minipage}}
+\newcommand{\STATE}{\par\noindent}
+\newcommand{\REQUIRE}{\STATE\textbf{Вход:} }
+\newcommand{\ENSURE}{\STATE\textbf{Выход:} }
+\newcommand{\FOR}[1]{\STATE\textbf{для } #1 \textbf{ выполнить}}
+\newcommand{\FORALL}[1]{\STATE\textbf{для всех } #1 \textbf{ выполнить}}
+\newcommand{\ENDFOR}{\STATE\textbf{конец цикла}}
+\newcommand{\IF}[1]{\STATE\textbf{если } #1 \textbf{, то}}
+\newcommand{\ENDIF}{\STATE\textbf{конец условия}}
+\newcommand{\REPEAT}{\STATE\textbf{повторять}}
+\newcommand{\UNTIL}[1]{\STATE\textbf{пока не выполнено } #1}
+\newcommand{\COMMENT}[1]{\hfill{\footnotesize // #1}}
+\newcommand{\State}{\STATE}
+\newcommand{\Require}{\REQUIRE}
+\newcommand{\Ensure}{\ENSURE}
+\newcommand{\For}[1]{\FOR{#1}}
+\newcommand{\ForAll}[1]{\FORALL{#1}}
+\newcommand{\EndFor}{\ENDFOR}
+\newcommand{\If}[1]{\IF{#1}}
+\newcommand{\EndIf}{\ENDIF}
+\newcommand{\Comment}[1]{\COMMENT{#1}}
+\newcommand{\Statex}{\STATE}
+
+% Project metadata.
+\newcommand{\UniversityName}{Министерство науки и высшего образования Российской Федерации\\
+Федеральное государственное автономное образовательное учреждение высшего образования\\
+<<Московский физико-технический институт (национальный исследовательский институт)>>}
+\newcommand{\FacultyName}{Факультет управления и прикладной математики}
+\newcommand{\DepartmentName}{Кафедра <<Интеллектуальные системы>>}
+\newcommand{\ProgramName}{03.04.01 Прикладные математика и физика}
+\newcommand{\ThesisTitle}{Frank--Wolfe algorithm in machine learning}
+\newcommand{\AuthorGroup}{}
+\newcommand{\AuthorName}{Игнашин Игорь Николаевич}
+\newcommand{\SupervisorDegree}{кандидат физико-математических наук}
+\newcommand{\SupervisorName}{Грабовой Андрей Олегович}
+\newcommand{\CityYear}{Москва 2026}
+
+\begin{document}
+
+\input{thesis_sections/frontpage}
+
+% Нумерация обычно начинается со второй страницы.
+\setcounter{page}{2}
+
+\newpage
+\setcounter{tocdepth}{1}
+\tableofcontents
+
+\input{thesis_sections/notation}
+\input{thesis_sections/annotation}
+\input{thesis_sections/introduction}
+\input{thesis_sections/fw_modifications}
+\input{thesis_sections/cfw_ml}
+\input{thesis_sections/scfw}
+\input{thesis_sections/dbcfw}
+\input{thesis_sections/conclusion}
+\input{thesis_sections/bibliography}
+
+\end{document}

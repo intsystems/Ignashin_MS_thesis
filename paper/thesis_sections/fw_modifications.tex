@@ -1,0 +1,916 @@
+\newpage
+
+\section{Модификации алгоритма Frank--Wolfe}
+\label{sec:fw-modifications}
+
+В этой главе рассматриваются модификации алгоритма Frank--Wolfe для задачи поиска равновесного распределения транспортных потоков.
+В качестве базовой модели используется модель Бекмана.
+Основное внимание уделяется выбору направления шага: классический FW использует только решение текущей линейной подзадачи, тогда как CFW, BFW, FFW, NFW и WFFW строят новое направление с учетом предыдущих направлений.
+Такая идея позволяет уменьшить эффект зигзагообразного движения и ускорить уменьшение относительного зазора.
+
+Рассматриваемая линия методов включает CFW и BFW~\cite{mitradjieva2013stiff}, FFW~\cite{fukushima1984modified}, а также последующие расширения~\cite{ignashin2024modifications}:
+\begin{enumerate}
+    \item Conjugate Frank--Wolfe (CFW);
+    \item Bi-conjugate Frank--Wolfe (BFW);
+    \item Fukushima Frank--Wolfe (FFW);
+    \item N-conjugate Frank--Wolfe (NFW);
+    \item Weighted Fukushima Frank--Wolfe (WFFW).
+\end{enumerate}
+Алгоритмы NFW и WFFW являются развитием BFW и FFW соответственно.
+Если BFW использует два предыдущих направления, то NFW использует $N$ предыдущих направлений.
+Если FFW использует среднее по нескольким предыдущим направлениям, то WFFW заменяет его экспоненциальным сглаживанием.
+
+\subsection{Модель Бекмана}
+
+Пусть задан ориентированный дорожный граф с множеством ребер $\cE$.
+Вектор $f=\{f_e\}_{e\in\cE}$ задает потоки по дорогам, а функция $\tau_e(f_e)$ задает
+время движения по ребру $e$ при потоке $f_e$.
+В транспортной модели спрос задается не по ребрам, а по корреспонденциям источник--сток.
+Пусть $OD$ обозначает множество таких пар:
+\[
+    OD=\{(i,j)\mid i\in O,\;j\in D\}.
+\]
+Для каждой пары $w=(i,j)\in OD$ задан спрос $d_w=d_{(i,j)}$, то есть объем потока,
+который должен быть перевезен из $i$ в $j$.
+Пусть $\cP_w=\cP_{i,j}$ есть множество всех путей из $i$ в $j$, а
+$\cP=\bigcup_{w\in OD}\cP_w$ -- множество всех рассматриваемых путей.
+Переменная $x_p$ обозначает поток, отправленный по пути $p$.
+Тогда для каждой OD-пары допустимые распределения потока по путям образуют симплекс
+\[
+    X^w=
+    \left\{
+        x^w \;\middle|\;
+        \sum_{p\in\cP_w}x_p=d_w,\;
+        x_p\geq 0
+    \right\},
+\]
+а полное множество допустимых путевых потоков имеет декартову структуру
+\[
+    X=\prod_{w\in OD}X^w.
+\]
+
+Связь потоков по путям и потоков по дорогам задается матрицей принадлежности ребер путям:
+\[
+    f=\Theta x,
+    \qquad
+    \Theta=\{\delta_{e,p}\}_{e\in\cE,\;p\in\cP},
+\]
+где $\delta_{e,p}=1$, если путь $p$ проходит по ребру $e$, и $\delta_{e,p}=0$ иначе.
+Множество допустимых потоков по ребрам обозначим
+\[
+    \cF=\{f=\Theta x\mid x\in X\}.
+\]
+
+В модели Бекмана равновесное распределение потоков находится как решение задачи минимизации
+потенциальной функции
+\begin{equation}
+    \Psi(f) =
+    \sum_{e \in \cE}
+    \underbrace{\int_{0}^{f_e} \tau_e(z)\,dz}_{\sigma_e(f_e)}
+    \longrightarrow
+    \min_{f=\Theta x,\;x\in X}.
+    \label{eq:beckmann-primal}
+\end{equation}
+
+В качестве функций затрат используются классические BPR-функции:
+\begin{equation}
+    \tau_e(f_e)=
+    \bar t_e
+    \left(
+        1+\rho\left(\frac{f_e}{\bar f_e}\right)^{1/\mu}
+    \right),
+    \qquad
+    \tau(f)=\{\tau_e(f_e)\}_{e\in\cE}.
+    \label{eq:bpr}
+\end{equation}
+Параметры $\rho,\mu,\bar t_e,\bar f_e$ задаются дорожной сетью.
+Градиент функционала $\Psi$ имеет простой вид:
+\[
+    \nabla \Psi(f)=\tau(f).
+\]
+
+\subsection{Оптимальные условия модели Бекмана}
+\label{subsec:beckmann-optimality}
+
+Для задачи
+\[
+    \min_{f=\Theta x,\;x\in X}\Psi(f)
+\]
+условие оптимальности можно записать как вариационное неравенство
+\[
+    \inner{\nabla\Psi(f^\ast)}{f-f^\ast}\geq 0,
+    \qquad f=\Theta x,\;x\in X.
+\]
+Так как $\nabla\Psi(f)=\tau(f)$, получаем
+\[
+    \inner{\tau(f^\ast)}{\Theta x-\Theta x^\ast}\geq 0.
+\]
+Пусть для некоторой OD-пары $w$ существует используемый путь $p$ и другой путь $q$ с
+меньшим временем движения:
+\[
+    \sum_{e\in q}\tau_e(f^\ast_e)
+    <
+    \sum_{e\in p}\tau_e(f^\ast_e).
+\]
+Тогда можно перенести малую величину потока с $p$ на $q$ и получить допустимое направление,
+для которого скалярное произведение с $\tau(f^\ast)$ отрицательно.
+Это противоречит вариационному неравенству.
+Следовательно, в оптимуме все используемые пути являются кратчайшими при равновесных временах.
+Так модель Бекмана связывает выпуклую оптимизацию и принцип Вардропа.
+
+\subsection{Линейный оракул как all-or-nothing assignment}
+\label{subsec:fw-lmo-aon}
+
+Главная причина, по которой метод Frank--Wolfe удобен для модели Бекмана, состоит в структуре
+линейного оракула.
+На итерации с текущим потоком $f^k$ нужно решить
+\begin{equation}
+    s_k^{FW}
+    =
+    \argmin_{y=\Theta x,\;x\in X}
+    \inner{\tau(f^k)}{y}
+    =
+    \argmin_{x\in X}
+    \sum_{w\in OD}\sum_{p\in\cP_w}x_p c_p^k,
+    \label{eq:fw-lmo-aon}
+\end{equation}
+где стоимость пути $p$ при текущих временах равна
+\[
+    c_p^k
+    =
+    \sum_{e\in\cE}\delta_{e,p}\tau_e(f_e^k).
+\]
+Так как $X=\prod_{w\in OD}X^w$, задача~\eqref{eq:fw-lmo-aon} распадается по OD-парам:
+\[
+    \min_{x^w\in X^w}
+    \sum_{p\in\cP_w}x_p c_p^k,
+    \qquad
+    w=(i,j)\in OD.
+\]
+Это линейная задача на симплексе.
+Поэтому оптимум достигается в вершине: весь спрос $d_w$ назначается на один из путей
+минимальной стоимости.
+Иными словами,
+\[
+    p_w^k
+    \in
+    \argmin_{p\in\cP_w}
+    c_p^k
+    =
+    \argmin_{p\in\cP_w}
+    \sum_{e\in\cE}\delta_{e,p}\tau_e(f_e^k),
+\]
+а решение линейного оракула имеет вид
+\[
+    \begin{aligned}
+        x_{p_w^k}^{k,FW}&=d_w,\\
+        x_p^{k,FW}&=0,
+        \qquad
+        p\in\cP_w\setminus\{p_w^k\},\quad w\in OD,\\
+        s_{k,e}^{FW}
+        &=
+        \sum_{w\in OD}d_w\delta_{e,p_w^k},
+        \qquad e\in\cE.
+    \end{aligned}
+\]
+Таким образом, вызов LMO буквально является набором задач поиска кратчайших путей:
+для каждой OD-пары $w=(i,j)$ нужно найти кратчайший путь из $i$ в $j$ в графе с длинами
+ребер $\tau_e(f_e^k)$.
+В реализации не требуется явно перечислять все пути из $\cP_w$; достаточно запустить
+алгоритм кратчайших путей по текущим весам ребер.
+Если кратчайших путей несколько, можно выбрать любой из них или распределить спрос между
+ними без изменения значения линейной подзадачи.
+
+\subsection{Классический алгоритм Frank--Wolfe}
+
+Алгоритм Frank--Wolfe на каждой итерации линеаризует целевой функционал в текущей точке $f^k$:
+\[
+    \Psi_k(y)=
+    \Psi(f^k)+\inner{\nabla\Psi(f^k)}{y-f^k}.
+\]
+После этого решается линейная задача
+\begin{equation}
+    s_k^{FW}
+    =
+    \argmin_{y=\Theta x,\;x\in X}
+    \inner{\nabla\Psi(f^k)}{y}
+    =
+    \argmin_{y=\Theta x,\;x\in X}
+    \inner{\tau(f^k)}{y}.
+    \label{eq:fw-lmo-traffic}
+\end{equation}
+Как показано в разделе~\ref{subsec:fw-lmo-aon}, в модели Бекмана эта задача решается как
+all-or-nothing assignment по текущим кратчайшим путям.
+Направление шага определяется как
+\[
+    d_k^{FW}=s_k^{FW}-f^k,
+\]
+а длина шага выбирается одномерной минимизацией:
+\[
+    \gamma_k=\argmin_{\gamma\in[0,1]}\Psi(f^k+\gamma d_k^{FW}),
+    \qquad
+    f^{k+1}=f^k+\gamma_k d_k^{FW}.
+\]
+
+\begin{algorithm}
+\caption{Frank--Wolfe для модели Бекмана}
+\begin{algorithmic}
+\REQUIRE начальная точка $f^0\in\cF$, максимальное число итераций
+\STATE $k\gets 0$
+\REPEAT
+\STATE $s_k^{FW}\gets \argmin_{s\in\cF}\inner{\nabla\Psi(f^k)}{s}$
+\STATE $d_k\gets s_k^{FW}-f^k$
+\STATE $\gamma_k\gets\argmin_{\gamma\in[0,1]}\Psi(f^k+\gamma d_k)$
+\STATE $f^{k+1}\gets f^k+\gamma_k d_k$
+\STATE $k\gets k+1$
+\UNTIL{достигнут критерий остановки}
+\ENSURE приближение равновесного распределения потоков
+\end{algorithmic}
+\end{algorithm}
+
+Для оценки качества решения используется зазор Frank--Wolfe
+\[
+    g_k=
+    \max_{s=\Theta x,\;x\in X}
+    \inner{\nabla\Psi(f^k)}{f^k-s}.
+\]
+При липшицевом градиенте известны стандартные оценки сходимости:
+\[
+    \min_{1\leq m\leq k} g_m
+    \leq
+    \frac{\min\{2h_0,L\diam(C)^2\}}{\sqrt{k+1}},
+    \qquad
+    \Psi(f^k)-\Psi(f^\ast)
+    \leq
+    \frac{2L\diam(C)^2}{k+1}.
+\]
+Несмотря на эти гарантии, на практике FW часто быстро снижает функционал только на первых итерациях, а затем начинает двигаться зигзагообразно и замедляется.
+
+\subsection{Conjugate Frank--Wolfe}
+
+Идея CFW состоит в построении нового направления, сопряженного к предыдущему направлению относительно гессиана целевой функции.
+Пусть $d^{k-1}=s^{k-1}-f^{k-1}$.
+Алгоритм ищет новую точку направления в виде выпуклой комбинации
+\[
+    s_k=\alpha s_k^{FW}+(1-\alpha)s_{k-1}.
+\]
+Коэффициент $\alpha$ выбирается так, чтобы выполнялось условие сопряженности
+\[
+    (d^{k-1})^T\nabla^2\Psi(f^k)d^k=0,
+    \qquad
+    d^k=s_k-f^k.
+\]
+Для модели Бекмана гессиан диагонален, поэтому умножение на гессиан вычисляется дешево.
+Коэффициент $\alpha$ имеет вид
+\begin{equation}
+    \alpha =
+    \frac{
+        (f^k-s_{k-1})^T
+        \nabla^2\Psi(f^k)
+        (s_{k-1}-f^{k-1})
+    }{
+        (s_k^{FW}-s_{k-1})^T
+        \nabla^2\Psi(f^k)
+        (s_{k-1}-f^{k-1})
+    }.
+    \label{eq:cfw-alpha-traffic}
+\end{equation}
+Чтобы алгоритм не выродился в движение только по старому направлению, коэффициент проецируется на отрезок $[\alpha_0,1]$, где $\alpha_0\in(0,1]$.
+
+\begin{algorithm}
+\caption{Conjugate Frank--Wolfe}
+\begin{algorithmic}
+\REQUIRE $f^0\in\cF$, параметр $\alpha_0\in(0,1]$
+\STATE выполнить один шаг FW и получить $f^1$, $s_0$
+\STATE $k\gets 1$
+\REPEAT
+\STATE $s_k^{FW}\gets\argmin_{s\in\cF}\inner{\nabla\Psi(f^k)}{s}$
+\STATE вычислить $\alpha$ по формуле~\eqref{eq:cfw-alpha-traffic}
+\STATE $\alpha\gets\min\{1,\max\{\alpha_0,\alpha\}\}$
+\STATE $s_k\gets\alpha s_k^{FW}+(1-\alpha)s_{k-1}$
+\STATE $d_k\gets s_k-f^k$
+\STATE $\gamma_k\gets\argmin_{\gamma\in[0,1]}\Psi(f^k+\gamma d_k)$
+\STATE $f^{k+1}\gets f^k+\gamma_k d_k$
+\STATE $k\gets k+1$
+\UNTIL{достигнут критерий остановки}
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Fukushima Frank--Wolfe и WFFW}
+
+Алгоритм Fukushima Frank--Wolfe использует усреднение предыдущих направлений.
+В общем виде новая точка направления может быть записана как
+\begin{equation}
+    s_k=
+    \alpha_0 s_k^{FW}
+    +
+    \sum_{j=1}^{N}\alpha_j s_{k-j},
+    \qquad
+    \sum_{j=0}^{N}\alpha_j=1,
+    \qquad
+    \alpha_j\geq 0.
+    \label{eq:fukushima-general}
+\end{equation}
+Классический FFW выбирает равномерные веса по нескольким предыдущим направлениям.
+Предложенная модификация Weighted Fukushima Frank--Wolfe заменяет равномерное среднее экспоненциальным сглаживанием.
+Пусть $\eta\in(0,1)$ задает скорость затухания.
+Тогда старые направления получают меньший вес, а более свежие направления сильнее влияют на шаг:
+\[
+    s_k=
+    \alpha_0 s_k^{FW}
+    +
+    (1-\alpha_0)
+    \sum_{j=1}^{N} w_j s_{k-j},
+    \qquad
+    w_j=
+    \frac{(1-\eta)\eta^{j-1}}{\sum_{\ell=1}^{N}(1-\eta)\eta^{\ell-1}}.
+\]
+Такой выбор сохраняет выпуклость комбинации и одновременно делает алгоритм менее чувствительным к слишком старым направлениям.
+
+\subsection{N-conjugate Frank--Wolfe}
+
+Bi-conjugate Frank--Wolfe использует две предыдущие точки направления.
+N-conjugate Frank--Wolfe обобщает эту идею на $N$ предыдущих направлений.
+Ищется новая точка
+\[
+    s_k=
+    \alpha_0 s_k^{FW}
+    +
+    \sum_{j=1}^{N}\alpha_j s_{k-j},
+    \qquad
+    \alpha_j\geq 0,
+    \qquad
+    \sum_{j=0}^{N}\alpha_j=1,
+\]
+такая, что новое направление
+\[
+    d^k=s_k-f^k
+\]
+сопряжено к $N$ предыдущим направлениям:
+\begin{equation}
+    (d^k)^T\nabla^2\Psi(f^k)d^{k-j}=0,
+    \qquad
+    j=1,\ldots,N.
+    \label{eq:nfw-conjugacy}
+\end{equation}
+В NFW используется предположение, что предыдущие направления уже попарно сопряжены относительно текущего гессиана:
+\[
+    (d^{k-m})^T\nabla^2\Psi(f^k)d^{k-n}=0,
+    \qquad
+    m\neq n,\quad m,n=1,\ldots,N.
+\]
+Тогда коэффициенты могут быть вычислены независимо:
+\begin{equation}
+    \alpha_j
+    =
+    -\alpha_0
+    \frac{
+        (d_k^{FW})^T\nabla^2\Psi(f^k)d^{k-j}
+    }{
+        (d^{k-j})^T\nabla^2\Psi(f^k)d^{k-j}
+    },
+    \qquad j=1,\ldots,N,
+    \label{eq:nfw-alpha}
+\end{equation}
+а $\alpha_0$ выбирается так, чтобы сумма весов была равна единице и все веса оставались неотрицательными.
+
+\begin{algorithm}
+\caption{N-conjugate Frank--Wolfe}
+\begin{algorithmic}
+\REQUIRE $f^0\in\cF$, число сопряженных направлений $N$
+\STATE выполнить первые $N$ шагов FW или CFW для инициализации
+\REPEAT
+\STATE $s_k^{FW}\gets\argmin_{s\in\cF}\inner{\nabla\Psi(f^k)}{s}$
+\STATE вычислить коэффициенты $\alpha_0,\ldots,\alpha_N$ из условий~\eqref{eq:nfw-conjugacy}
+\STATE $s_k\gets\alpha_0s_k^{FW}+\sum_{j=1}^{N}\alpha_js_{k-j}$
+\STATE $d_k\gets s_k-f^k$
+\STATE $\gamma_k\gets\argmin_{\gamma\in[0,1]}\Psi(f^k+\gamma d_k)$
+\STATE $f^{k+1}\gets f^k+\gamma_k d_k$
+\UNTIL{достигнут критерий остановки}
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Экспериментальные результаты}
+
+Эксперименты проводились на открытых транспортных датасетах из репозитория TransportationNetworks~\cite{bstabler}.
+В качестве метрики качества использовался относительный зазор.
+Сравнивались FW, CFW, BFW, FFW, WFFW и NFW при различных значениях $N$.
+
+\subsection{Более подробная запись CFW и BFW}
+
+В транспортной постановке CFW рассматривается как первый способ заменить направление
+классического FW направлением, которое использует информацию о предыдущем шаге.
+Если обозначить обычную FW-точку через $y^k=s_k^{FW}$, то на итерации $k$ строится точка
+\[
+    \bar y^k=\alpha y^k+(1-\alpha)y^{k-1}.
+\]
+Далее направление определяется как
+\[
+    d^k=\bar y^k-f^k.
+\]
+Коэффициент $\alpha$ получается из условия сопряженности
+\[
+    (d^k)^T\nabla^2\Psi(f^k)d^{k-1}=0.
+\]
+Подставляя $d^k=\alpha(y^k-f^k)+(1-\alpha)(y^{k-1}-f^k)$, получаем
+\[
+    \alpha
+    =
+    \frac{(f^k-y^{k-1})^T\nabla^2\Psi(f^k)d^{k-1}}
+    {(y^k-y^{k-1})^T\nabla^2\Psi(f^k)d^{k-1}}.
+\]
+После вычисления коэффициент ограничивается снизу параметром $\alpha_{\min}$:
+\[
+    \alpha\leftarrow \max\{\alpha_{\min},\min\{1,\alpha\}\}.
+\]
+Это техническое ограничение важно: оно не позволяет методу полностью игнорировать новое решение
+линейного оракула и тем самым сохраняет связь с классическим FW.
+
+Bi-conjugate Frank--Wolfe использует уже две предыдущие точки.
+Пусть нужно построить
+\[
+    \bar y^k=\alpha_0y^k+\alpha_1y^{k-1}+\alpha_2y^{k-2},
+    \qquad
+    \alpha_0+\alpha_1+\alpha_2=1.
+\]
+Условия сопряженности имеют вид
+\[
+    (d^k)^T\nabla^2\Psi(f^k)d^{k-1}=0,
+    \qquad
+    (d^k)^T\nabla^2\Psi(f^k)d^{k-2}=0.
+\]
+Эта идея используется как промежуточный шаг к NFW: BFW показывает,
+что память о двух направлениях может быть лучше памяти об одном направлении,
+но жестко фиксированное число направлений не позволяет проверить, где находится
+практически оптимальный уровень памяти алгоритма.
+
+\begin{algorithm}
+\caption{Bi-conjugate Frank--Wolfe}
+\begin{algorithmic}
+\REQUIRE допустимая точка $f^0$, нижняя граница $\alpha_{\min}$, число итераций
+\STATE выполнить две начальные итерации FW/CFW и сохранить $y^0,y^1$
+\FOR{$k=2,3,\ldots$}
+\STATE $y^k\gets\argmin_{y\in\cF}\inner{\nabla\Psi(f^k)}{y}$
+\STATE найти $\alpha_0,\alpha_1,\alpha_2$ из условий сопряженности к $d^{k-1}$ и $d^{k-2}$
+\STATE спроецировать коэффициенты на допустимый симплекс с учетом $\alpha_0\geq\alpha_{\min}$
+\STATE $\bar y^k\gets\alpha_0y^k+\alpha_1y^{k-1}+\alpha_2y^{k-2}$
+\STATE $d^k\gets\bar y^k-f^k$
+\STATE $\gamma_k\gets\argmin_{\gamma\in[0,1]}\Psi(f^k+\gamma d^k)$
+\STATE $f^{k+1}\gets f^k+\gamma_kd^k$
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Вывод коэффициентов NFW}
+
+Пусть на итерации $k$ доступны $N$ предыдущих направлений
+\[
+    d^{k-1},d^{k-2},\ldots,d^{k-N}.
+\]
+NFW ищет новую точку в виде
+\[
+    \bar y^k=\alpha_0y^k+\sum_{i=1}^{N}\alpha_i y^{k-i},
+    \qquad
+    \sum_{i=0}^{N}\alpha_i=1.
+\]
+Тогда
+\[
+    d^k=\bar y^k-f^k
+    =
+    \alpha_0(y^k-f^k)
+    +
+    \sum_{i=1}^{N}\alpha_i(y^{k-i}-f^k).
+\]
+Для каждого $j=1,\ldots,N$ требуется
+\[
+    (d^k)^T H_k d^{k-j}=0,
+    \qquad
+    H_k=\nabla^2\Psi(f^k).
+\]
+Если предыдущие направления считаются попарно сопряженными относительно текущего $H_k$,
+то есть
+\[
+    (d^{k-i})^T H_k d^{k-j}=0,\qquad i\neq j,
+\]
+коэффициенты можно вычислять последовательно.
+Это предположение техническое, но оно согласуется с мотивацией метода:
+если на предыдущих итерациях направления были сопряжены относительно близких гессианов,
+а $H_k$ меняется плавно, то старые направления остаются почти сопряженными и относительно
+нового гессиана.
+
+Выведем формулы подробнее.
+Из обновления
+\[
+    f^k=(1-\gamma_{k-1})f^{k-1}+\gamma_{k-1}y^{k-1},
+    \qquad
+    d^{k-1}=y^{k-1}-f^{k-1},
+\]
+получаем
+\[
+    y^{k-1}-f^k=(1-\gamma_{k-1})d^{k-1}.
+\]
+Обозначим
+\[
+    \bar d^{k-i}=(1-\gamma_{k-i})d^{k-i}.
+\]
+Для $m\geq 1$ используем телескопическую сумму:
+\[
+    y^{k-m}-f^k
+    =
+    \sum_{i=0}^{m-2}
+    \left(y^{k-m+i}-y^{k-m+i+1}\right)
+    +
+    y^{k-1}-f^k .
+\]
+Разность соседних точек линейного оракула переписывается через прошлые направления:
+\[
+    y^{k-m+i}-y^{k-m+i+1}
+    =
+    \bar d^{k-m+i}-d^{k-m+i+1}.
+\]
+Следовательно,
+\begin{equation}
+    d^k
+    =
+    \alpha_0d_k^{FW}
+    +
+    \sum_{m=1}^{N}
+    \alpha_m
+    \left(
+        \sum_{i=0}^{m-1}\bar d^{k-m+i}
+        -
+        \sum_{i=0}^{m-2}d^{k-m+i+1}
+    \right).
+    \label{eq:nfw-direction-expanded}
+\end{equation}
+Теперь подставим~\eqref{eq:nfw-direction-expanded} в условия сопряженности
+\[
+    (d^{k-m})^T H_k d^k=0,
+    \qquad m=1,\ldots,N.
+\]
+Введем обозначения
+\[
+    A_{k-m}=(d^{k-m})^T H_k d_k^{FW},
+    \qquad
+    B_{k-m}=(d^{k-m})^T H_k d^{k-m}.
+\]
+После зануления смешанных слагаемых по предположению о попарной сопряженности остается
+\begin{equation}
+    \alpha_0A_{k-m}
+    +
+    (1-\gamma_{k-m})B_{k-m}\alpha_m
+    -
+    \gamma_{k-m}B_{k-m}
+    \sum_{i=m+1}^{N}\alpha_i
+    =
+    0.
+    \label{eq:nfw-alpha-system}
+\end{equation}
+Положим $\alpha_m=\beta_m\alpha_0$.
+Тогда коэффициенты $\beta_m$ считаются с конца к началу:
+\begin{equation}
+    \beta_N
+    =
+    -\frac{A_{k-N}}{B_{k-N}(1-\gamma_{k-N})},
+    \label{eq:nfw-beta-last}
+\end{equation}
+\begin{equation}
+    \beta_m
+    =
+    -\frac{A_{k-m}}{B_{k-m}(1-\gamma_{k-m})}
+    +
+    \frac{\gamma_{k-m}}{1-\gamma_{k-m}}
+    \sum_{i=m+1}^{N}\beta_i,
+    \qquad m=N-1,\ldots,1.
+    \label{eq:nfw-beta-recursion}
+\end{equation}
+Нормировка выпуклой комбинации дает
+\begin{equation}
+    \alpha_0=
+    \frac{1}{1+\sum_{i=1}^{N}\beta_i},
+    \qquad
+    \alpha_m=\beta_m\alpha_0.
+    \label{eq:nfw-alpha-normalization}
+\end{equation}
+Если найденные коэффициенты нарушают неотрицательность, алгоритм возвращается к более простой
+комбинации: уменьшает число используемых направлений или фактически делает шаг CFW/FW.
+Именно поэтому NFW не является отдельным дорогим методом: он является надстройкой над тем же
+линейным оракулом, а дополнительные вычисления состоят из нескольких скалярных произведений с
+диагональным гессианом.
+
+Отдельная эвристика связана с шагом $\gamma_k=1$.
+Если такой шаг выполняется, новая точка полностью задается текущим направлением, а накопленная
+информация о прошлых направлениях теряет смысл.
+Поэтому в реализации метода используется параметр $\gamma_{\max}$:
+если $\gamma_k\geq\gamma_{\max}$, счетчик доступных сопряженных направлений сбрасывается,
+и накопление памяти для NFW начинается заново.
+
+\subsection{Fukushima Frank--Wolfe как сглаживание направлений}
+
+В алгоритме Fukushima Frank--Wolfe новое направление не выводится из условий сопряженности.
+Оно строится как выпуклое среднее по текущему FW-направлению и нескольким предыдущим точкам
+линейного оракула.
+Если хранится $N$ прошлых точек, то
+\[
+    \bar y^k
+    =
+    \lambda y^k
+    +
+    (1-\lambda)
+    \frac{1}{N}\sum_{i=1}^{N}y^{k-i}.
+\]
+После этого
+\[
+    d^k=\bar y^k-f^k.
+\]
+Такой подход проще CFW/NFW: он не использует гессиан и не пытается сделать направления
+сопряженными.
+Его смысл состоит в подавлении резких колебаний, возникающих из-за того, что линейный оракул
+часто выбирает сильно различающиеся кратчайшие пути на соседних итерациях.
+
+Weighted FFW меняет только способ усреднения:
+\[
+    \bar y^k
+    =
+    \lambda y^k
+    +
+    (1-\lambda)
+    \sum_{i=1}^{N}w_i y^{k-i},
+    \qquad
+    \sum_{i=1}^{N}w_i=1.
+\]
+Веса выбираются геометрическими:
+\[
+    w_i=\frac{q^{i-1}}{\sum_{\ell=1}^{N}q^{\ell-1}},
+    \qquad q\in(0,1).
+\]
+При малом $q$ метод почти полностью ориентируется на последнее сохраненное направление.
+При $q$ около единицы WFFW становится близким к обычному FFW.
+Такой параметр позволяет управлять тем, насколько быстро алгоритм забывает устаревшую информацию.
+
+\begin{algorithm}
+\caption{Weighted Fukushima Frank--Wolfe}
+\begin{algorithmic}
+\REQUIRE $f^0\in\cF$, глубина памяти $N$, параметры $\lambda,q\in(0,1)$
+\FOR{$k=0,1,2,\ldots$}
+\STATE $y^k\gets\argmin_{y\in\cF}\inner{\nabla\Psi(f^k)}{y}$
+\STATE выбрать доступные прошлые точки $y^{k-1},\ldots,y^{k-N}$
+\STATE $w_i\gets q^{i-1}/\sum_{\ell=1}^{N}q^{\ell-1}$
+\STATE $\bar y^k\gets\lambda y^k+(1-\lambda)\sum_{i=1}^{N}w_i y^{k-i}$
+\STATE $d^k\gets\bar y^k-f^k$
+\STATE $\gamma_k\gets\argmin_{\gamma\in[0,1]}\Psi(f^k+\gamma d^k)$
+\STATE $f^{k+1}\gets f^k+\gamma_kd^k$
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Относительный зазор и критерий остановки}
+
+В экспериментах основной метрикой является относительный зазор, используемый в работах по
+ускоренным FW-методам для traffic assignment~\cite{mitradjieva2013stiff,arrache2008accelerating}.
+В отличие от простого значения целевой функции, эта величина сравнивает текущее верхнее
+приближение оптимального значения с накопленной нижней оценкой минимума.
+Поэтому она показывает не только факт убывания $\Psi$, но и то, насколько близко текущее
+решение к оптимальному значению в относительном масштабе.
+
+Пусть $f^k$ -- текущий поток, $s_k^{FW}$ -- решение линейного оракула, а $f^{k+1}$ -- точка
+после линейного поиска.
+Верхняя оценка оптимального значения берется как значение целевой функции в новой допустимой
+точке:
+\begin{equation}
+    \operatorname{UBD}_k=\Psi(f^{k+1}).
+    \label{eq:ubd-relgap}
+\end{equation}
+Так как $f^{k+1}\in\cF$, всегда выполнено
+$\Psi(f^\ast)\leq \operatorname{UBD}_k$.
+
+Нижняя оценка строится из линеаризации выпуклой функции $\Psi$ в точке $f^k$:
+\begin{equation}
+    \operatorname{LB}_k
+    =
+    \min_{y=\Theta x,\;x\in X}
+    \left\{
+        \Psi(f^k)+\inner{\nabla\Psi(f^k)}{y-f^k}
+    \right\}.
+    \label{eq:lb-relgap}
+\end{equation}
+По выпуклости для любой допустимой точки $y$ справедливо
+\[
+    \Psi(y)\geq \Psi(f^k)+\inner{\nabla\Psi(f^k)}{y-f^k}.
+\]
+В частности, для оптимального потока $f^\ast$ получаем
+\[
+    \Psi(f^\ast)
+    \geq
+    \Psi(f^k)+\inner{\nabla\Psi(f^k)}{f^\ast-f^k}
+    \geq
+    \operatorname{LB}_k.
+\]
+Следовательно, $\operatorname{LB}_k$ действительно является нижней оценкой оптимального
+значения.
+
+Эту нижнюю оценку можно выразить через зазор Frank--Wolfe.
+Обозначим
+\begin{equation}
+    g_k
+    =
+    \inner{\nabla\Psi(f^k)}{f^k-s_k^{FW}}
+    =
+    \inner{\tau(f^k)}{f^k-s_k^{FW}}.
+    \label{eq:fw-gap-relgap-section}
+\end{equation}
+Так как $s_k^{FW}$ минимизирует линейную форму $\inner{\nabla\Psi(f^k)}{y}$ на допустимом
+множестве, из~\eqref{eq:lb-relgap} следует
+\begin{equation}
+    \operatorname{LB}_k
+    =
+    \Psi(f^k)+\inner{\nabla\Psi(f^k)}{s_k^{FW}-f^k}
+    =
+    \Psi(f^k)-g_k.
+    \label{eq:lb-fw-gap}
+\end{equation}
+В транспортной постановке $g_k$ имеет понятную интерпретацию: он измеряет, насколько можно
+уменьшить линейную аппроксимацию целевой функции, если переназначить весь спрос на текущие
+кратчайшие пути.
+
+Поскольку отдельные нижние оценки могут колебаться от итерации к итерации, в относительном
+зазоре используется лучшая накопленная нижняя оценка:
+\begin{equation}
+    \operatorname{BLB}_k
+    =
+    \max_{1\leq m\leq k}\operatorname{LB}_m.
+    \label{eq:blb-relgap}
+\end{equation}
+Из $\operatorname{LB}_m\leq\Psi(f^\ast)$ для всех $m$ следует
+$\operatorname{BLB}_k\leq\Psi(f^\ast)$.
+Итоговая метрика задается формулой
+\begin{equation}
+    \operatorname{RG}_k
+    =
+    \frac{\operatorname{UBD}_k-\operatorname{BLB}_k}
+         {\operatorname{BLB}_k}.
+    \label{eq:rg-relgap}
+\end{equation}
+Если $\operatorname{BLB}_k>0$, что выполняется для стандартных транспортных задач с
+положительными временами движения, то
+\begin{equation}
+    \frac{\Psi(f^{k+1})-\Psi(f^\ast)}{\Psi(f^\ast)}
+    \leq
+    \frac{\Psi(f^{k+1})-\operatorname{BLB}_k}{\operatorname{BLB}_k}
+    =
+    \operatorname{RG}_k.
+    \label{eq:rg-upper-bound}
+\end{equation}
+Таким образом, $\operatorname{RG}_k$ является вычислимой верхней оценкой относительной
+ошибки по целевой функции.
+
+Также эта величина не хуже грубой относительной оценки, построенной напрямую по FW-зазору.
+Действительно, при точном линейном поиске $\Psi(f^{k+1})\leq\Psi(f^k)$, а
+$\operatorname{BLB}_k\geq\operatorname{LB}_k$.
+Поэтому
+\begin{equation}
+    \operatorname{RG}_k
+    =
+    \frac{\Psi(f^{k+1})-\operatorname{BLB}_k}{\operatorname{BLB}_k}
+    \leq
+    \frac{\Psi(f^k)-\operatorname{LB}_k}{\operatorname{BLB}_k}
+    =
+    \frac{g_k}{\operatorname{BLB}_k}.
+    \label{eq:rg-vs-fw-gap}
+\end{equation}
+Именно поэтому в сравнении модификаций FW используется $\operatorname{RG}_k$: он сохраняет
+связь с зазором Frank--Wolfe, но дополнительно учитывает лучшую накопленную нижнюю оценку
+оптимального значения.
+Алгоритм считается более быстрым, если достигает одного и того же уровня
+$\operatorname{RG}_k$ за меньшее число итераций или за меньшее время.
+
+Для всех модификаций схема эксперимента одинакова:
+\begin{enumerate}
+    \item построить начальный допустимый поток назначением спроса на кратчайшие пути при свободных временах;
+    \item на каждой итерации пересчитать времена $\tau(f^k)$;
+    \item решить линейный оракул как набор задач кратчайших путей;
+    \item построить направление конкретной модификации;
+    \item выполнить точный линейный поиск по $\gamma\in[0,1]$;
+    \item вычислить $\operatorname{LB}_k$, обновить $\operatorname{BLB}_k$ и сохранить
+    $\operatorname{RG}_k$ вместе со значением целевой функции.
+\end{enumerate}
+Такая унификация важна: различия в результатах объясняются именно выбором направления,
+а не разными правилами шага или разными линейными оракулами.
+
+\subsection{Серии экспериментов}
+
+Эксперименты проводились на транспортных сетях Anaheim, SiouxFalls, Berlin-Tiergarten,
+Terrassa-Asymmetric, Chicago-Sketch, Berlin-Mitte-Center, Berlin-Friedrichshain, Barcelona
+и Berlin-Mitte-Prenzlauerberg-Friedrichshain-Center.
+Во всех сериях сравнивается зависимость относительного зазора от времени работы.
+Это важно: методы используют один и тот же линейный оракул кратчайших путей и один и тот же
+линейный поиск, поэтому различия на графиках отражают именно выбор направления.
+
+Первая серия сравнивает FW, CFW, BFW, WFFW и $3$-conjugate FW.
+Главный вопрос здесь состоит в том, дает ли третье сопряженное направление выигрыш по сравнению
+с уже известным BFW.
+На рис.~\ref{fig:fw-mod-cfw-0}--\ref{fig:fw-mod-cfw-8} видно, что на многих сетях
+$3$-conjugate FW уменьшает относительный зазор быстрее BFW, CFW и классического FW.
+Это означает, что эффект памяти не исчерпывается двумя направлениями.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth]{fw_modifications/0_CFW.pdf}
+\caption{Сходимость относительного зазора для NFW, CFW, BFW, WFFW и FW на сетях Chicago-Sketch, Berlin-Friedrichshain и Anaheim.}
+\label{fig:fw-mod-cfw-0}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth]{fw_modifications/3_CFW.pdf}
+\caption{Сходимость относительного зазора для NFW, CFW, BFW, WFFW и FW на сетях Berlin-Mitte-Center, Berlin-Tiergarten и Barcelona.}
+\label{fig:fw-mod-cfw-3}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth]{fw_modifications/8_CFW.pdf}
+\caption{Сходимость относительного зазора для NFW, CFW, BFW, WFFW и FW на сетях Berlin-Mitte-Prenzlauerberg-Friedrichshain-Center, SiouxFalls и Terrassa-Asymmetric.}
+\label{fig:fw-mod-cfw-8}
+\end{figure}
+
+Вторая серия посвящена сравнению Fukushima Frank--Wolfe и Weighted Fukushima Frank--Wolfe.
+Здесь проверяется, насколько простое сглаживание направлений может конкурировать с
+сопряженными методами.
+Равномерное усреднение FFW стабилизирует траекторию, но может запаздывать, поскольку старые
+направления удерживают алгоритм в области, которая уже не соответствует текущим кратчайшим
+путям.
+WFFW исправляет эту особенность с помощью геометрического забывания.
+Результаты приведены на рис.~\ref{fig:fw-mod-wffw-0}--\ref{fig:fw-mod-wffw-2}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth]{fw_modifications/0_WFW_weighted.pdf}
+\caption{Сравнение FFW, WFFW и CFW по относительному зазору на сетях Anaheim и Berlin-Friedrichshain.}
+\label{fig:fw-mod-wffw-0}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth]{fw_modifications/2_WFW_weighted.pdf}
+\caption{Сравнение FFW, WFFW и CFW по относительному зазору на сетях SiouxFalls и Terrassa-Asymmetric.}
+\label{fig:fw-mod-wffw-2}
+\end{figure}
+
+Третья серия меняет глубину памяти NFW.
+Сравниваются варианты с разным числом предыдущих направлений.
+При $N=2$ метод совпадает по смыслу с BFW, а при больших $N$ начинает использовать более
+длинную историю направлений.
+На рис.~\ref{fig:fw-mod-nfw-0}--\ref{fig:fw-mod-nfw-2} видно, что увеличение глубины памяти
+может давать дополнительное ускорение, но эффект зависит от сети: слишком старые направления
+иногда описывают уже неактуальную локальную геометрию задачи.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth]{fw_modifications/0_NFW.pdf}
+\caption{Сравнение NFW с разной глубиной памяти и BFW на сетях Anaheim и Berlin-Friedrichshain.}
+\label{fig:fw-mod-nfw-0}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth]{fw_modifications/2_NFW.pdf}
+\caption{Сравнение NFW с разной глубиной памяти и BFW на сетях SiouxFalls и Terrassa-Asymmetric.}
+\label{fig:fw-mod-nfw-2}
+\end{figure}
+
+Четвертая серия проверяет параметры WFFW.
+Если вес текущего FW-направления слишком мал, метод двигается инерционно и может медленно
+реагировать на изменение кратчайших путей.
+Если этот вес слишком велик, метод почти совпадает с FW и теряет смысл сглаживания.
+На рис.~\ref{fig:fw-mod-wffw-params} показано, что нужен баланс между новым FW-направлением
+и памятью о прошлых направлениях.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth]{fw_modifications/0_WFW.pdf}
+\caption{Сходимость WFFW при различных параметрах геометрического сглаживания на сети Terrassa-Asymmetric.}
+\label{fig:fw-mod-wffw-params}
+\end{figure}
+
+Основные наблюдения следующие.
+Во-первых, методы, использующие предыдущие направления, в большинстве экспериментов сходятся
+быстрее классического FW.
+Во-вторых, использование более чем двух сопряженных направлений может давать дополнительное
+ускорение: вариант $3$-conjugate FW часто оказывается одним из наиболее эффективных.
+В-третьих, WFFW обычно улучшает FFW и CFW за счет управляемого забывания старых направлений,
+хотя в ряде экспериментов уступает NFW.
+Таким образом, использование памяти о предыдущих направлениях является устойчивым способом
+ускорить FW без изменения линейного оракула.
+
+\input{thesis_sections/fw_technical_details}
+
+\subsection{Выводы по модификациям}
+
+Рассмотренные модификации сохраняют ключевое преимущество FW: каждая итерация требует решения той же линейной подзадачи, которая в транспортной модели сводится к поиску кратчайших путей.
+Дополнительные вычисления связаны с линейным поиском и комбинированием предыдущих направлений.
+Для модели Бекмана эти операции существенно дешевле линейного оракула, поскольку гессиан диагонален.
+
+Эксперименты показывают, что направление шага является главным объектом для улучшения FW.
+Наиболее перспективным оказывается семейство сопряженных методов, особенно NFW при малых значениях $N$.
+Эта идея становится отправной точкой для следующей главы, где CFW и NFW переносятся из транспортной постановки в задачи машинного обучения.

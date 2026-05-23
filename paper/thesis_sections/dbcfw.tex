@@ -1,0 +1,1103 @@
+\newpage
+
+\section{Децентрализованный блочно-координатный Frank--Wolfe}
+\label{sec:dbcfw}
+
+В этой главе рассматривается Decentralized Block-Coordinate Frank--Wolfe (DBCFW).
+Это распределенное обобщение блочно-координатного Frank--Wolfe.
+Метод опирается на идеи BCFW и децентрализованного FW~\cite{lacoste2013block,wai2017decentralized,vedernikov2023decentralized}.
+Метод объединяет три идеи:
+\begin{enumerate}
+    \item децентрализованный консенсус между вычислительными узлами;
+    \item отслеживание градиента для приближения среднего градиента глобальной функции;
+    \item стохастический выбор блоков и суженный линейный оракул на каждом узле.
+\end{enumerate}
+Такой алгоритм естественно продолжает BCFW/SOFW: если в транспортной задаче блоками являются OD-пары или источники, то в общей распределенной постановке блоками являются компоненты декартова произведения допустимого множества.
+
+\subsection{Мотивация и место DBCFW среди FW-методов}
+
+Классический Frank--Wolfe хорошо подходит для задач с простым линейным оракулом и дорогой
+проекцией.
+Однако в современных задачах машинного обучения часто появляются еще две сложности.
+Во-первых, данные распределены между несколькими узлами и не могут быть собраны в одном месте.
+Во-вторых, само допустимое множество имеет блочную структуру, поэтому полный линейный оракул
+избыточен на каждой итерации.
+
+Decentralized Frank--Wolfe решает первую проблему: каждый агент работает со своей локальной
+функцией $f_i$, а согласование происходит через коммуникационный граф.
+Block-Coordinate Frank--Wolfe решает вторую проблему: на итерации обновляется только часть
+блоков допустимого множества.
+DBCFW объединяет эти две идеи.
+В результате каждый агент не только использует локальную информацию и общается с соседями,
+но и решает линейный оракул только на выбранных блоках.
+
+Такая постановка особенно естественна для задач вида
+\[
+    D=D_1\times\dots\times D_n,
+\]
+где каждый блок $D_k$ имеет собственный дешевый линейный оракул.
+Если полный оракул по $D$ стоит примерно как сумма оракулов по всем блокам, то обновление
+батча размера $B\ll n$ уменьшает стоимость итерации примерно в $n/B$ раз.
+Цена этого выигрыша состоит в более шумном направлении и необходимости учитывать ошибки
+консенсуса между агентами.
+
+\subsection{Связанные направления}
+
+DBCFW опирается на три линии работ.
+Первая линия -- децентрализованный FW с градиентным отслеживанием.
+В таких методах каждый агент хранит локальную точку $x_t^i$ и локальную оценку глобального
+градиента.
+Смешивание точек отвечает за консенсус, а смешивание градиентных оценок отвечает за то,
+чтобы каждый агент двигался приблизительно по направлению среднего градиента.
+
+Вторая линия -- блочно-координатный FW.
+В BCFW допустимое множество является декартовым произведением, и линейный оракул вызывается
+только для случайного блока.
+Для выпуклых гладких задач это сохраняет порядок $O(1/t)$ по ожидаемой субоптимальности,
+но уменьшает стоимость одной итерации.
+
+Третья линия -- стохастический транспортный FW из предыдущей главы.
+SOFW показывает, что блочная случайность может быть не только теоретической конструкцией,
+но и практическим способом ускорить задачу транспортного назначения.
+DBCFW переносит эту идею на более общую распределенную постановку.
+
+\subsection{Постановка распределенной задачи}
+
+Пусть имеется $N$ узлов.
+Узел $i$ имеет доступ только к локальной функции $f_i:D\to\R$.
+Требуется решить задачу
+\begin{equation}
+    \min_{x\in D}
+    f(x)
+    :=
+    \frac{1}{N}\sum_{i=1}^{N}f_i(x),
+    \label{eq:dbcfw-problem}
+\end{equation}
+где $D\subset\R^d$ компактно и выпукло.
+Предполагается, что множество имеет блочную структуру
+\[
+    D=D_1\times\dots\times D_n.
+\]
+Каждый узел поддерживает локальную точку $x_t^i\in D$.
+Средняя точка сети равна
+\[
+    x_{\mathrm{avg},t}
+    =
+    \frac{1}{N}\sum_{i=1}^{N}x_t^i.
+\]
+Диаметр допустимого множества обозначается
+\[
+    \bar\rho=
+    \max_{x,y\in D}\norm{x-y}_2.
+\]
+
+\subsection{Коммуникационная модель}
+
+На итерации $t$ узлы обмениваются информацией по графу коммуникаций с матрицей смешивания $W_t\in\R^{N\times N}$.
+Граф может меняться от итерации к итерации.
+Более того, $W_t$ может быть случайной матрицей, если топология коммуникаций или выбор ребер задаются случайным механизмом.
+Используются стандартные предположения из децентрализованной оптимизации~\cite{wai2017decentralized,vedernikov2023decentralized}.
+
+\begin{assumption}
+\label{ass:dbcfw-mixing}
+Для каждой итерации $t$ матрица $W_t$ согласована с текущим графом коммуникаций:
+\[
+    (W_t)_{ij}=0,
+    \qquad
+    i\neq j,\quad (i,j)\notin E_t.
+\]
+Она неотрицательна и дважды стохастична:
+\[
+    (W_t)_{ij}\geq0,
+    \qquad
+    W_t\mathbf{1}=\mathbf{1},
+    \qquad
+    \mathbf{1}^TW_t=\mathbf{1}^T.
+\]
+Кроме того, существует $\lambda\in(0,1)$ такая, что для всех $z\in\R^N$
+\[
+    \left\|
+    \left(
+        W_t-\frac{1}{N}\mathbf{1}\mathbf{1}^T
+    \right)z
+    \right\|_2
+    \leq
+    \lambda\norm{z}_2.
+\]
+Если графы случайны, все эти свойства предполагаются выполненными почти наверное
+условно относительно истории до коммуникационного шага.
+Иными словами, далее используется одна и та же константа сжатия $\lambda$ для любой
+реализации time-varying последовательности матриц $\{W_t\}$.
+\end{assumption}
+
+\begin{assumption}
+\label{ass:dbcfw-smooth}
+Каждая функция $f_i$ выпукла и $L$-гладка на $D$:
+\[
+    0
+    \leq
+    f_i(y)-f_i(x)-\inner{\nabla f_i(x)}{y-x}
+    \leq
+    \frac{L}{2}\norm{y-x}_2^2,
+    \qquad
+    x,y\in D.
+\]
+\end{assumption}
+
+Оценки на ошибки консенсуса и градиентного отслеживания в этой главе не постулируются
+отдельно.
+Они выводятся ниже из предположений о смешивании, гладкости и компактности множества $D$.
+
+\subsection{Алгоритм DBCFW}
+
+В DBCFW каждый узел сначала смешивает локальные точки с соседями:
+\[
+    \tilde x_t^i=
+    \sum_{j=1}^{N}(W_t)_{ij}x_t^j.
+\]
+Затем он обновляет локальную оценку градиента и снова применяет смешивание:
+\[
+    g_t^i=
+    \tilde g_{t-1}^i
+    +
+    \nabla f_i(\tilde x_t^i)
+    -
+    \nabla f_i(\tilde x_{t-1}^i),
+\]
+\[
+    \tilde g_t^i=
+    \sum_{j=1}^{N}(W_t)_{ij}g_t^j.
+\]
+После этого узел выбирает подмножество блоков $I_t^i\subset\{1,\dots,n\}$ размера $B$ и строит суженное множество:
+\[
+    D_t^i
+    =
+    \left(\prod_{k\in I_t^i}D_k\right)
+    \times
+    \left(\prod_{k\notin I_t^i}\{\tilde x_t^i[k]\}\right).
+\]
+Линейный оракул решается только на выбранных блоках:
+\[
+    v_t^i
+    \in
+    \argmin_{v\in D_t^i}
+    \inner{\tilde g_t^i}{v}.
+\]
+Затем выполняется FW-обновление
+\[
+    x_{t+1}^i
+    =
+    (1-\gamma_t)\tilde x_t^i+\gamma_t v_t^i.
+\]
+
+\begin{algorithm}
+\caption{Decentralized Block-Coordinate Frank--Wolfe}
+\label{alg:dbcfw}
+\begin{algorithmic}
+\REQUIRE множество $D=D_1\times\dots\times D_n$, шаги $\gamma_t$, матрицы $W_t$, размер батча $B$
+\STATE инициализировать $x_0^i\in D$, $\tilde x_{-1}^i\gets x_0^i$, $\tilde g_{-1}^i\gets\nabla f_i(\tilde x_{-1}^i)$ для всех $i$
+\FOR{$t=0,1,2,\ldots$}
+\FORALL{$i\in\{1,\ldots,N\}$ параллельно}
+\STATE $\tilde x_t^i\gets\sum_{j=1}^{N}(W_t)_{ij}x_t^j$
+\STATE $g_t^i\gets\tilde g_{t-1}^i+\nabla f_i(\tilde x_t^i)-\nabla f_i(\tilde x_{t-1}^i)$
+\STATE $\tilde g_t^i\gets\sum_{j=1}^{N}(W_t)_{ij}g_t^j$
+\STATE выбрать блоки $I_t^i\subset\{1,\ldots,n\}$, $|I_t^i|=B$
+\STATE построить $D_t^i=\left(\prod_{k\in I_t^i}D_k\right)\times\left(\prod_{k\notin I_t^i}\{\tilde x_t^i[k]\}\right)$
+\STATE $v_t^i\gets\argmin_{v\in D_t^i}\inner{\tilde g_t^i}{v}$
+\STATE $x_{t+1}^i\gets(1-\gamma_t)\tilde x_t^i+\gamma_t v_t^i$
+\ENDFOR
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Связь с классическим DFW}
+
+Если каждый узел на каждой итерации выбирает все блоки,
+\[
+    I_t^i=\{1,\ldots,n\},
+\]
+то суженное множество совпадает с исходным:
+\[
+    D_t^i=D.
+\]
+В этом случае DBCFW превращается в стандартный Decentralized Frank--Wolfe с градиентным отслеживанием:
+\[
+    v_t^i\in\argmin_{v\in D}\inner{\tilde g_t^i}{v}.
+\]
+Следовательно, DBCFW является строгим обобщением децентрализованного FW: он сохраняет консенсус и отслеживание градиента, но заменяет полный линейный оракул блочно-суженным оракулом.
+
+\begin{proposition}
+\label{prop:dbcfw-to-dfw}
+Если для всех узлов $i$ и всех итераций $t$ выбрано $I_t^i=\{1,\ldots,n\}$,
+то алгоритм DBCFW совпадает с децентрализованным Frank--Wolfe с градиентным
+отслеживанием.
+\end{proposition}
+
+\begin{proof}
+При полном выборе блоков имеем
+\[
+    D_t^i
+    =
+    \left(\prod_{k=1}^{n}D_k\right)=D.
+\]
+Следовательно, строка линейного оракула в алгоритме DBCFW принимает вид
+\[
+    v_t^i
+    \in
+    \argmin_{v\in D}\inner{\tilde g_t^i}{v}.
+\]
+Все остальные строки алгоритма не зависят от размера батча:
+смешивание точек
+\[
+    \tilde x_t^i=\sum_{j=1}^{N}(W_t)_{ij}x_t^j
+\]
+и градиентное отслеживание
+\[
+    g_t^i=
+    \tilde g_{t-1}^i+
+    \nabla f_i(\tilde x_t^i)-
+    \nabla f_i(\tilde x_{t-1}^i)
+\]
+остаются теми же.
+Значит, единственное отличие DBCFW от DFW исчезает, и полученная схема совпадает с
+полным децентрализованным FW.
+\end{proof}
+
+\subsection{Полный DFW как предельный случай}
+
+Для ясности запишем соответствующую полную схему.
+Каждый агент сначала усредняет точки с соседями, затем обновляет оценку градиента,
+после чего решает полный линейный оракул.
+
+\begin{algorithm}
+\caption{Decentralized Frank--Wolfe с градиентным отслеживанием}
+\label{alg:dfw-full}
+\begin{algorithmic}
+\REQUIRE множество $D$, шаги $\gamma_t$, матрицы смешивания $W_t$
+\STATE инициализировать $x_0^i\in D$ и $g_0^i=\nabla f_i(x_0^i)$
+\FOR{$t=0,1,2,\ldots$}
+\FORALL{$i=1,\ldots,N$ параллельно}
+\STATE $\tilde x_t^i\gets\sum_{j=1}^{N}(W_t)_{ij}x_t^j$
+\STATE $\tilde g_t^i\gets\sum_{j=1}^{N}(W_t)_{ij}g_t^j$
+\STATE $v_t^i\gets\argmin_{v\in D}\inner{\tilde g_t^i}{v}$
+\STATE $x_{t+1}^i\gets(1-\gamma_t)\tilde x_t^i+\gamma_tv_t^i$
+\STATE $g_{t+1}^i\gets \tilde g_t^i+\nabla f_i(x_{t+1}^i)-\nabla f_i(x_t^i)$
+\ENDFOR
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}
+
+DBCFW заменяет только строку полного оракула.
+Вместо $D$ используется $D_t^i$, где невыбранные блоки зафиксированы в точке
+$\tilde x_t^i$.
+Поэтому DBCFW можно рассматривать как DFW с активным подмножеством координат.
+
+\subsection{Связь с SOFW}
+
+SOFW из главы~\ref{sec:scfw} можно рассматривать как активный блочный FW, где агентами являются OD-пары.
+Пусть
+\[
+    x=(x^w)_{w\in OD},
+    \qquad
+    \cX=\prod_{w\in OD}\cX^w.
+\]
+Если на итерации выбрано множество активных корреспонденций $\cI_k\subset OD$, то допустимое множество принимает вид
+\[
+    \cX_k=
+    \left(\prod_{w\in\cI_k}\cX^w\right)
+    \times
+    \left(\prod_{w\notin\cI_k}\{x_k^w\}\right).
+\]
+Это полностью совпадает с конструкцией $D_t^i$ в DBCFW, если блоки $D_k$ отождествить с блоками $\cX^w$.
+Таким образом,
+\[
+    \text{агент}
+    \longleftrightarrow
+    \text{OD-пара},
+    \qquad
+    \text{активные агенты}
+    \longleftrightarrow
+    \cI_k,
+\]
+а локальный оракул агента $w$ имеет вид
+\[
+    \argmin_{u^w\in\cX^w}
+    \inner{\tau(f_k)}{\Theta_wu^w}.
+\]
+В транспортной задаче этот оракул является поиском кратчайшего пути для выбранной корреспонденции.
+
+\subsection{Отличие SOFW от обычного DFW}
+
+Несмотря на похожую блочную форму, SOFW и DFW имеют разную информационную структуру.
+В DFW каждый агент хранит свою копию полного вектора $x$ и пытается согласовать ее с копиями
+других агентов.
+Случайность, если она есть, обычно связана с коммуникациями или стохастическими градиентами.
+В SOFW же нет нескольких копий полного решения.
+Есть один глобальный поток, разложенный по источникам или OD-парам, а случайность возникает
+из выбора активных блоков.
+
+Это различие важно для алгоритмической интерпретации.
+SOFW можно записать как распределенный active-set FW:
+каждая OD-пара $w$ отвечает за свой блок $\cX^w$, а на итерации активируется только
+подмножество таких ``агентов''.
+Но эти агенты не решают независимые локальные задачи с собственными функциями $f_i$.
+Все они используют один и тот же глобальный градиент
+\[
+    \tau(f_k)=\nabla\Psi(f_k),
+\]
+который зависит от суммарного потока по всем ребрам.
+
+DBCFW находится между этими двумя картинами.
+Как DFW, он имеет несколько вычислительных узлов с локальными функциями.
+Как SOFW, он использует активные блоки допустимого множества.
+Поэтому DBCFW можно рассматривать как общий язык, в котором:
+\[
+    \text{децентрализация}
+    \quad\text{и}\quad
+    \text{блочная стохастичность}
+\]
+описаны одновременно.
+
+\subsection{Кривизна и оценка сходимости}
+
+Для анализа вводятся блочные константы кривизны.
+Пусть $D=D_1\times\dots\times D_n$.
+Для блока $k$ и точки $x\in D$ определим точку $y$:
+\[
+    y[j]=
+    \begin{cases}
+        x[k]+\gamma(s[k]-x[k]), & j=k,\\
+        x[j], & j\neq k,
+    \end{cases}
+    \qquad
+    \gamma\in[0,1].
+\]
+Блочная константа кривизны равна
+\[
+    C_k
+    =
+    \sup
+    \frac{2}{\gamma^2}
+    \left[
+        f(y)-f(x)-\inner{\nabla f(x)}{y-x}
+    \right].
+\]
+Глобальная константа кривизны
+\[
+    C
+    =
+    \sup
+    \frac{2}{\gamma^2}
+    \left[
+        f(x+\gamma(s-x))
+        -
+        f(x)
+        -
+        \gamma\inner{\nabla f(x)}{s-x}
+    \right]
+\]
+удовлетворяет
+\[
+    C\leq\sum_{k=1}^{n}C_k,
+    \qquad
+    C\leq L\bar\rho^2.
+\]
+
+\begin{lemma}[Консенсусная ошибка для time-varying графов]
+\label{lem:dbcfw-consensus}
+Пусть выполнено предположение~\ref{ass:dbcfw-mixing}.
+Пусть $\alpha\in(0,1]$, шаги удовлетворяют
+$0\leq\gamma_t\leq \Gamma t^{-\alpha}$, $\gamma_t\leq1$,
+$\Gamma\geq 1$, и пусть $t_0$ -- такое целое число, что
+\begin{equation}
+\label{eq:dbcfw-t0}
+    \lambda
+    \leq
+    \left(\frac{t_0}{t_0+1}\right)^\alpha
+    \frac{1}{1+t_0^{-\alpha}}.
+\end{equation}
+Тогда для любой реализации time-varying последовательности матриц смешивания, удовлетворяющей
+предположению~\ref{ass:dbcfw-mixing}, выполнено
+\begin{equation}
+\label{eq:dbcfw-consensus-bound}
+    \Delta_p^t
+    :=
+    \max_{1\leq i\leq N}\norm{\tilde x_t^i-x_{\mathrm{avg},t}}_2
+    \leq
+    \frac{C_p}{t^\alpha},
+    \qquad
+    C_p=t_0^\alpha\Gamma\sqrt N\,\bar\rho .
+\end{equation}
+Если графы случайны, оценка выполняется почти наверное и, следовательно, также после
+взятия математического ожидания.
+\end{lemma}
+
+\begin{proof}
+Доказательство ведется pathwise: фиксируем произвольную реализацию последовательности
+$\{W_t\}$, для которой выполнено предположение~\ref{ass:dbcfw-mixing}.
+Это важно для time-varying случая: в доказательстве используется не фиксированная матрица,
+а только равномерное сжатие с одним и тем же $\lambda$ на каждой итерации.
+
+Введем матрицы отклонений
+\[
+    E_t=
+    \begin{bmatrix}
+        (x_t^1-x_{\mathrm{avg},t})^T\\
+        \vdots\\
+        (x_t^N-x_{\mathrm{avg},t})^T
+    \end{bmatrix},
+    \qquad
+    \tilde E_t=
+    \begin{bmatrix}
+        (\tilde x_t^1-x_{\mathrm{avg},t})^T\\
+        \vdots\\
+        (\tilde x_t^N-x_{\mathrm{avg},t})^T
+    \end{bmatrix}.
+\]
+Двойная стохастичность $W_t$ сохраняет среднее:
+\[
+    \frac1N\sum_{i=1}^N\tilde x_t^i=x_{\mathrm{avg},t}.
+\]
+Поэтому, применяя предположение~\ref{ass:dbcfw-mixing} покоординатно и затем суммируя по
+координатам, получаем фробениусово сжатие
+\begin{equation}
+\label{eq:dbcfw-matrix-contraction}
+    \norm{\tilde E_t}_F
+    =
+    \left\|
+        \left(W_t-\frac1N\mathbf 1\mathbf 1^T\right)E_t
+    \right\|_F
+    \leq
+    \lambda\norm{E_t}_F .
+\end{equation}
+Это равенство не требует постоянного графа: на итерации $t$ используется именно текущая
+матрица $W_t$.
+
+Для $1\leq t\leq t_0$ имеем $\tilde x_t^i,x_{\mathrm{avg},t}\in D$: смешанные точки
+остаются в $D$ по неотрицательности строк $W_t$ и выпуклости $D$, а средняя точка
+также лежит в $D$.
+Поэтому
+\[
+    \norm{\tilde E_t}_F\leq \sqrt N\,\bar\rho
+    \leq
+    \frac{C_p}{t^\alpha}.
+\]
+Предположим теперь, что для некоторого $t\geq t_0$ выполнено
+$\norm{\tilde E_t}_F\leq C_p/t^\alpha$.
+Из FW-обновления
+\[
+    x_{t+1}^i=(1-\gamma_t)\tilde x_t^i+\gamma_t v_t^i,
+    \qquad
+    x_{\mathrm{avg},t+1}=(1-\gamma_t)x_{\mathrm{avg},t}
+    +\gamma_t v_{\mathrm{avg},t},
+\]
+где $v_{\mathrm{avg},t}=N^{-1}\sum_i v_t^i$, следует
+\[
+    x_{t+1}^i-x_{\mathrm{avg},t+1}
+    =
+    (1-\gamma_t)(\tilde x_t^i-x_{\mathrm{avg},t})
+    +
+    \gamma_t(v_t^i-v_{\mathrm{avg},t}).
+\]
+Так как $v_t^i\in D$, $v_{\mathrm{avg},t}\in D$ по выпуклости $D$, и диаметр $D$
+равен $\bar\rho$,
+\[
+    \norm{E_{t+1}}_F
+    \leq
+    (1-\gamma_t)\norm{\tilde E_t}_F
+    +
+    \gamma_t\sqrt N\,\bar\rho
+    \leq
+    \frac{C_p+\Gamma\sqrt N\,\bar\rho}{t^\alpha}.
+\]
+Применяя сжатие уже с матрицей следующей коммуникации $W_{t+1}$, получаем
+\[
+    \norm{\tilde E_{t+1}}_F
+    \leq
+    \lambda
+    \frac{C_p+\Gamma\sqrt N\,\bar\rho}{t^\alpha}
+    =
+    \lambda(1+t_0^{-\alpha})\frac{C_p}{t^\alpha}.
+\]
+Условие~\eqref{eq:dbcfw-t0} замыкает индукцию:
+\[
+    \lambda(1+t_0^{-\alpha})\frac{1}{t^\alpha}
+    \leq
+    \frac{1}{(t+1)^\alpha}.
+\]
+Следовательно,
+\[
+    \norm{\tilde E_{t+1}}_F\leq \frac{C_p}{(t+1)^\alpha}.
+\]
+Поскольку максимум по агентам не превосходит фробениусову норму, получаем
+оценку~\eqref{eq:dbcfw-consensus-bound}.
+\end{proof}
+
+\begin{lemma}[Ошибка градиентного отслеживания]
+\label{lem:dbcfw-gradient-tracking}
+Пусть выполнены предположения~\ref{ass:dbcfw-mixing}--\ref{ass:dbcfw-smooth}, а шаги
+удовлетворяют условиям леммы~\ref{lem:dbcfw-consensus}.
+Обозначим
+\[
+    \tilde g_t=\frac1N\sum_{i=1}^N\tilde g_t^i.
+\]
+Тогда для любой реализации time-varying последовательности матриц смешивания выполнено
+\begin{equation}
+\label{eq:dbcfw-gt-bound}
+    \Delta_d^t
+    :=
+    \max_{1\leq i\leq N}\norm{\tilde g_t^i-\tilde g_t}_2
+    \leq
+    \frac{C_g}{t^\alpha},
+\end{equation}
+где $C_g$ можно взять любой константой, удовлетворяющей
+\[
+    C_g
+    \geq
+    \max
+    \left\{
+        t_0^\alpha
+        \max_{1\leq s\leq t_0}
+        \left(
+            \sum_{i=1}^N\norm{\tilde g_s^i-\tilde g_s}_2^2
+        \right)^{1/2},
+        \;
+        2\sqrt N\,t_0^\alpha(2C_p+\Gamma\bar\rho)L
+    \right\}.
+\]
+Если графы случайны, оценка снова имеет pathwise-смысл и потому выполняется почти наверное.
+\end{lemma}
+
+\begin{proof}
+Как и в лемме~\ref{lem:dbcfw-consensus}, фиксируем произвольную реализацию матриц
+$\{W_t\}$.
+Сначала заметим, что среднее значение градиентного трекера телескопически совпадает со
+средним локальным градиентом в смешанных точках:
+\begin{equation}
+\label{eq:dbcfw-tracker-average}
+    \tilde g_t
+    =
+    \frac1N\sum_{i=1}^N\nabla f_i(\tilde x_t^i).
+\end{equation}
+Действительно, двойная стохастичность дает
+$N^{-1}\sum_i\tilde g_t^i=N^{-1}\sum_i g_t^i$, а обновление
+\[
+    g_t^i=
+    \tilde g_{t-1}^i+
+    \nabla f_i(\tilde x_t^i)-\nabla f_i(\tilde x_{t-1}^i)
+\]
+после суммирования по $i$ дает телескопическую рекурсию.
+Начальное условие алгоритма задает эту рекурсию корректно.
+
+Введем энергию рассогласования
+\[
+    S_t=
+    \left(
+        \sum_{i=1}^N\norm{\tilde g_t^i-\tilde g_t}_2^2
+    \right)^{1/2}.
+\]
+Достаточно доказать $S_t\leq C_g/t^\alpha$.
+Для конечного числа начальных итераций $1\leq t\leq t_0$ это следует из определения
+$C_g$; соответствующий максимум конечен, поскольку $D$ компактно, а градиенты $f_i$
+непрерывны на $D$.
+
+Пусть $t\geq t_0$ и $S_t\leq C_g/t^\alpha$.
+Обозначим
+\[
+    \delta_{t+1}^i
+    =
+    \nabla f_i(\tilde x_{t+1}^i)-\nabla f_i(\tilde x_t^i),
+    \qquad
+    \bar\delta_{t+1}
+    =
+    \frac1N\sum_{i=1}^N\delta_{t+1}^i .
+\]
+Тогда
+\[
+    g_{t+1}^i=\tilde g_t^i+\delta_{t+1}^i,
+    \qquad
+    \tilde g_{t+1}^i=\sum_{j=1}^N(W_{t+1})_{ij}g_{t+1}^j,
+\]
+и, по двойной стохастичности $W_{t+1}$,
+$\tilde g_{t+1}=\tilde g_t+\bar\delta_{t+1}$.
+Здесь принципиально используется именно $W_{t+1}$: при time-varying графах матрица
+следующей коммуникации не обязана совпадать с $W_t$.
+
+Сжатие~\eqref{eq:dbcfw-matrix-contraction}, примененное к векторам $g_{t+1}^i$, дает
+\[
+    S_{t+1}
+    \leq
+    \lambda
+    \left(
+        \sum_{i=1}^N
+        \norm{g_{t+1}^i-\tilde g_{t+1}}_2^2
+    \right)^{1/2}.
+\]
+Так как
+\[
+    g_{t+1}^i-\tilde g_{t+1}
+    =
+    (\tilde g_t^i-\tilde g_t)+(\delta_{t+1}^i-\bar\delta_{t+1}),
+\]
+получаем
+\begin{equation}
+\label{eq:dbcfw-gt-split}
+    \left(
+        \sum_{i=1}^N
+        \norm{g_{t+1}^i-\tilde g_{t+1}}_2^2
+    \right)^{1/2}
+    \leq
+    S_t+
+    \left(
+        \sum_{i=1}^N
+        \norm{\delta_{t+1}^i-\bar\delta_{t+1}}_2^2
+    \right)^{1/2}.
+\end{equation}
+
+Оценим второе слагаемое.
+Из $L$-гладкости
+\[
+    \norm{\delta_{t+1}^i}_2
+    \leq
+    L\norm{\tilde x_{t+1}^i-\tilde x_t^i}_2.
+\]
+Для time-varying графа
+\[
+    \tilde x_{t+1}^i
+    =
+    \sum_{j=1}^N(W_{t+1})_{ij}x_{t+1}^j,
+\]
+поэтому, используя стохастичность строк $W_{t+1}$,
+\[
+\begin{aligned}
+    \norm{\tilde x_{t+1}^i-\tilde x_t^i}_2
+    &\leq
+    \sum_{j=1}^N(W_{t+1})_{ij}
+    \norm{x_{t+1}^j-\tilde x_t^j}_2
+    +
+    \sum_{j=1}^N(W_{t+1})_{ij}
+    \norm{\tilde x_t^j-\tilde x_t^i}_2                                   \\
+    &\leq
+    \gamma_t\bar\rho+2\Delta_p^t
+    \leq
+    \frac{\Gamma\bar\rho+2C_p}{t^\alpha}.
+\end{aligned}
+\]
+Здесь первая сумма контролируется FW-шагом, а вторая -- леммой
+о консенсусе~\ref{lem:dbcfw-consensus}.
+Следовательно,
+\[
+    \norm{\delta_{t+1}^i}_2
+    \leq
+    \frac{(\Gamma\bar\rho+2C_p)L}{t^\alpha}.
+\]
+Поскольку $\bar\delta_{t+1}$ является средним этих приращений,
+\[
+    \norm{\delta_{t+1}^i-\bar\delta_{t+1}}_2
+    \leq
+    2\frac{(\Gamma\bar\rho+2C_p)L}{t^\alpha},
+\]
+и
+\[
+    \left(
+        \sum_{i=1}^N
+        \norm{\delta_{t+1}^i-\bar\delta_{t+1}}_2^2
+    \right)^{1/2}
+    \leq
+    2\sqrt N\frac{(\Gamma\bar\rho+2C_p)L}{t^\alpha}
+    \leq
+    \frac{C_g}{t_0^\alpha t^\alpha}.
+\]
+Подставляя это и индукционное предположение в~\eqref{eq:dbcfw-gt-split}, имеем
+\[
+    S_{t+1}
+    \leq
+    \lambda
+    \left(1+t_0^{-\alpha}\right)
+    \frac{C_g}{t^\alpha}.
+\]
+Условие~\eqref{eq:dbcfw-t0} снова дает
+\[
+    S_{t+1}\leq\frac{C_g}{(t+1)^\alpha}.
+\]
+Индукция доказана, а из $\max_i\norm{\tilde g_t^i-\tilde g_t}_2\leq S_t$ следует
+оценка~\eqref{eq:dbcfw-gt-bound}.
+\end{proof}
+
+\begin{theorem}
+\label{thm:dbcfw-rate}
+Пусть выполнены предположения~\ref{ass:dbcfw-mixing}--\ref{ass:dbcfw-smooth}.
+Пусть число блоков равно $n$, а размер батча удовлетворяет $1\leq B\leq n$,
+\[
+    \tau=\frac{2n}{B},
+    \qquad
+    \gamma_t=\frac{2n}{B(t+\tau)}.
+\]
+Для $\alpha=1$ и $\Gamma=2n/B$ леммы~\ref{lem:dbcfw-consensus}
+и~\ref{lem:dbcfw-gradient-tracking} дают
+\[
+    \Delta_p^t
+    =
+    \max_{1\leq i\leq N}\norm{\tilde x_t^i-x_{\mathrm{avg},t}}_2
+    \leq\frac{C_p}{t},
+    \qquad
+    \Delta_d^t
+    =
+    \max_{1\leq i\leq N}\norm{\tilde g_t^i-\tilde g_t}_2
+    \leq\frac{C_g}{t}.
+\]
+Тогда для среднего итерата при $t\geq1$ выполняется оценка
+\[
+    \E[f(x_{\mathrm{avg},t})-f(x^\ast)]
+    \leq
+    \frac{\widetilde A_\tau}{t+\tau},
+\]
+где
+\[
+    A_\tau=
+    3\bar\rho(C_g+LC_p)+\frac{L}{2}\bar\rho^2,
+\]
+\[
+    H_1=\E[f(x_{\mathrm{avg},1})-f(x^\ast)],
+    \qquad
+    \widetilde A_\tau
+    =
+    \max
+    \left\{
+        (\tau+1)H_1,
+        \frac{4A_\tau n^2}{B^2}
+    \right\}.
+\]
+\end{theorem}
+
+\subsection{Доказательство оценки DBCFW}
+
+Доказательство теоремы~\ref{thm:dbcfw-rate} можно разбить на три шага.
+Первый шаг связывает изменение глобальной функции в средней точке сети с усредненным
+направлением агентов.
+Из $L$-гладкости имеем
+\[
+    f(x_{\mathrm{avg},t+1})
+    \leq
+    f(x_{\mathrm{avg},t})
+    +
+    \inner{\nabla f(x_{\mathrm{avg},t})}
+    {x_{\mathrm{avg},t+1}-x_{\mathrm{avg},t}}
+    +
+    \frac{L}{2}
+    \norm{x_{\mathrm{avg},t+1}-x_{\mathrm{avg},t}}_2^2.
+\]
+Так как матрицы $W_t$ дважды стохастичны, средняя точка после смешивания равна средней
+точке до смешивания:
+\[
+    \frac{1}{N}\sum_{i=1}^{N}\tilde x_t^i
+    =
+    \frac{1}{N}\sum_{i=1}^{N}x_t^i
+    =
+    x_{\mathrm{avg},t}.
+\]
+После FW-обновления
+\[
+    x_{t+1}^i=(1-\gamma_t)\tilde x_t^i+\gamma_t v_t^i
+\]
+получаем
+\[
+    x_{\mathrm{avg},t+1}
+    =
+    x_{\mathrm{avg},t}
+    +
+    \gamma_t
+    (v_{\mathrm{avg},t}-x_{\mathrm{avg},t}),
+    \qquad
+    v_{\mathrm{avg},t}=\frac{1}{N}\sum_{i=1}^{N}v_t^i.
+\]
+Следовательно,
+\[
+    f(x_{\mathrm{avg},t+1})
+    \leq
+    f(x_{\mathrm{avg},t})
+    +
+    \gamma_t
+    \inner{\nabla f(x_{\mathrm{avg},t})}
+    {v_{\mathrm{avg},t}-x_{\mathrm{avg},t}}
+    +
+    \frac{L\gamma_t^2}{2}\bar\rho^2.
+\]
+
+Второй шаг оценивает, насколько $v_{\mathrm{avg},t}$ близок к истинному FW-направлению.
+Главная техническая трудность состоит в том, что в DBCFW агент $i$ решает не полный
+линейный оракул на $D$, а ограниченный оракул на $D_t^i$.
+Поэтому нельзя напрямую сравнить $v_t^i$ с произвольной точкой $a\in D$.
+Для такого сравнения вводится точка $a_t^i(a)$, в которой выбранные блоки берутся из $a$,
+а остальные блоки замораживаются в смешанной точке $\tilde x_t^i$:
+\[
+    a_t^i(a)\in D_t^i,
+    \qquad
+    \left(a_t^i(a)\right)[k]
+    =
+    \begin{cases}
+        a[k], & k\in I_t^i,\\
+        \tilde x_t^i[k], & k\notin I_t^i.
+    \end{cases}
+\]
+Из оптимальности $v_t^i$ на суженном множестве следует
+\[
+    \inner{v_t^i}{\tilde g_t^i}
+    \leq
+    \inner{a_t^i(a)}{\tilde g_t^i},
+    \qquad a\in D.
+\]
+Теперь сравним направление агента с истинным градиентом в средней точке.
+Для любого $a\in D$ имеем
+\[
+\begin{aligned}
+    &\inner{v_t^i-x_{\mathrm{avg},t}}{\nabla f(x_{\mathrm{avg},t})}  \\
+    &=
+    \inner{v_t^i-x_{\mathrm{avg},t}}{\tilde g_t^i}
+    +
+    \inner{v_t^i-x_{\mathrm{avg},t}}
+    {\nabla f(x_{\mathrm{avg},t})-\tilde g_t^i}  \\
+    &\leq
+    \inner{a_t^i(a)-x_{\mathrm{avg},t}}{\tilde g_t^i}
+    +
+    \norm{v_t^i-x_{\mathrm{avg},t}}_2
+    \norm{\nabla f(x_{\mathrm{avg},t})-\tilde g_t^i}_2  \\
+    &\leq
+    \inner{a_t^i(a)-x_{\mathrm{avg},t}}{\nabla f(x_{\mathrm{avg},t})}
+    +
+    2\bar\rho
+    \norm{\nabla f(x_{\mathrm{avg},t})-\tilde g_t^i}_2.
+\end{aligned}
+\]
+В последнем переходе используется компактность $D$:
+$\norm{v_t^i-x_{\mathrm{avg},t}}_2\leq\bar\rho$ и
+$\norm{a_t^i(a)-x_{\mathrm{avg},t}}_2\leq\bar\rho$.
+
+Осталось оценить рассогласование градиентов.
+Обозначим среднее значение переменных трекинга через
+\[
+    \tilde g_t=\frac{1}{N}\sum_{i=1}^{N}\tilde g_t^i.
+\]
+Двойная стохастичность $W_t$ и телескопическая форма градиентного трекинга дают тождество
+\[
+    \tilde g_t
+    =
+    \frac{1}{N}\sum_{i=1}^{N}\nabla f_i(\tilde x_t^i).
+\]
+Поэтому
+\[
+\begin{aligned}
+    \norm{\nabla f(x_{\mathrm{avg},t})-\tilde g_t^i}_2
+    &\leq
+    \norm{\nabla f(x_{\mathrm{avg},t})-\tilde g_t}_2
+    +
+    \norm{\tilde g_t-\tilde g_t^i}_2                                      \\
+    &\leq
+    \frac{1}{N}\sum_{j=1}^{N}
+    \norm{\nabla f_j(x_{\mathrm{avg},t})-\nabla f_j(\tilde x_t^j)}_2
+    +
+    \Delta_d^t                                                            \\
+    &\leq
+    L\Delta_p^t+\Delta_d^t.
+\end{aligned}
+\]
+Следовательно, для любого $a\in D$
+\[
+    \inner{v_t^i-x_{\mathrm{avg},t}}{\nabla f(x_{\mathrm{avg},t})}
+    \leq
+    \inner{a_t^i(a)-x_{\mathrm{avg},t}}{\nabla f(x_{\mathrm{avg},t})}
+    +
+    2\bar\rho(\Delta_d^t+L\Delta_p^t).
+\]
+
+Третий шаг использует блочную случайность.
+Пусть $\mathcal F_t$ -- история до выбора блоков на итерации $t$.
+Если $I_t^i$ выбирается равномерно без возвращения и $|I_t^i|=B$, то для любого
+фиксированного $a\in D$ и любого вектора $w$ выполняется
+\[
+    \E\left[
+        \inner{a_t^i(a)-x_{\mathrm{avg},t}}{w}
+        \;\middle|\;\mathcal F_t
+    \right]
+    =
+    \frac{B}{n}\inner{a-x_{\mathrm{avg},t}}{w}
+    +
+    \left(1-\frac{B}{n}\right)
+    \inner{\tilde x_t^i-x_{\mathrm{avg},t}}{w}.
+\]
+Усреднение по агентам зануляет второй член, поскольку
+$N^{-1}\sum_i\tilde x_t^i=x_{\mathrm{avg},t}$.
+Берем $w=\nabla f(x_{\mathrm{avg},t})$ и выбираем
+\[
+    a=s_t\in
+    \argmin_{s\in D}
+    \inner{\nabla f(x_{\mathrm{avg},t})}{s}.
+\]
+Тогда из выпуклости
+\[
+    \inner{s_t-x_{\mathrm{avg},t}}{\nabla f(x_{\mathrm{avg},t})}
+    \leq
+    -\left(f(x_{\mathrm{avg},t})-f(x^\ast)\right).
+\]
+В итоге получаем условную оценку спуска
+\[
+    \E\left[
+    \inner{\nabla f(x_{\mathrm{avg},t})}{v_{\mathrm{avg},t}-x_{\mathrm{avg},t}}
+    \;\middle|\; \mathcal F_t\right]
+    \leq
+    -\frac{B}{n}
+    (f(x_{\mathrm{avg},t})-f(x^\ast))
+    +
+    2\bar\rho(\Delta_d^t+L\Delta_p^t).
+\]
+После подстановки в гладкостную оценку получается рекурсия
+\[
+    h_{t+1}
+    \leq
+    \left(1-\frac{B}{n}\gamma_t\right)h_t
+    +
+    2\gamma_t\bar\rho(\Delta_d^t+L\Delta_p^t)
+    +
+    \frac{L}{2}\gamma_t^2\bar\rho^2,
+\]
+где
+\[
+    h_t=\E[f(x_{\mathrm{avg},t})-f(x^\ast)].
+\]
+Используя оценки лемм~\ref{lem:dbcfw-consensus} и~\ref{lem:dbcfw-gradient-tracking},
+\[
+    \Delta_p^t\leq\frac{C_p}{t},
+    \qquad
+    \Delta_d^t\leq\frac{C_g}{t},
+\]
+получаем
+\[
+    h_{t+1}
+    \leq
+    \left(1-\frac{B}{n}\gamma_t\right)h_t
+    +
+    \gamma_t
+    \frac{2\bar\rho(C_g+LC_p)}{t}
+    +
+    \frac{L}{2}\gamma_t^2\bar\rho^2.
+\]
+При выборе
+\[
+    \gamma_t=\frac{2n}{B(t+\tau)},
+    \qquad
+    \tau=\frac{2n}{B},
+\]
+имеем
+\[
+    \frac{B}{n}\gamma_t=\frac{2}{t+\tau}.
+\]
+Кроме того,
+\[
+    \frac{\gamma_t/t}{\gamma_t^2}
+    =
+    \frac{B(t+\tau)}{2nt}
+    =
+    \frac{B}{2n}+\frac{1}{t}
+    \leq
+    \frac12+1
+    =
+    \frac32,
+\]
+где использованы $B\leq n$ и $t\geq1$.
+Следовательно, $\gamma_t/t\leq(3/2)\gamma_t^2$ для $t\geq1$.
+Значит, предыдущая рекурсия переходит в более удобный вид
+\[
+    h_{t+1}
+    \leq
+    \left(1-\frac{B}{n}\gamma_t\right)h_t
+    +
+    \left[
+        3\bar\rho(C_g+LC_p)+\frac{L}{2}\bar\rho^2
+    \right]\gamma_t^2.
+\]
+Обозначая
+\[
+    A_\tau=
+    3\bar\rho(C_g+LC_p)+\frac{L}{2}\bar\rho^2,
+\]
+и используя $\gamma_t^2=4n^2/[B^2(t+\tau)^2]$, перепишем рекурсию как
+\[
+    h_{t+1}
+    \leq
+    \left(1-\frac{2}{t+\tau}\right)h_t
+    +
+    \frac{4A_\tau n^2}{B^2(t+\tau)^2}.
+\]
+Докажем индукцией, что
+\[
+    h_t\leq\frac{\widetilde A_\tau}{t+\tau},
+    \qquad
+    \widetilde A_\tau
+    =
+    \max
+    \left\{
+        (\tau+1)h_1,
+        \frac{4A_\tau n^2}{B^2}
+    \right\}.
+\]
+База при $t=1$ следует прямо из определения $\widetilde A_\tau$:
+\[
+    h_1
+    \leq
+    \frac{\widetilde A_\tau}{\tau+1}.
+\]
+Если оценка верна для некоторого $t\geq1$, то
+\[
+\begin{aligned}
+    h_{t+1}
+    &\leq
+    \left(1-\frac{2}{t+\tau}\right)
+    \frac{\widetilde A_\tau}{t+\tau}
+    +
+    \frac{4A_\tau n^2}{B^2(t+\tau)^2}                                      \\
+    &\leq
+    \left(1-\frac{2}{t+\tau}\right)
+    \frac{\widetilde A_\tau}{t+\tau}
+    +
+    \frac{\widetilde A_\tau}{(t+\tau)^2}
+    =
+    \frac{\widetilde A_\tau(t+\tau-1)}{(t+\tau)^2}.
+\end{aligned}
+\]
+Так как
+\[
+    \frac{t+\tau-1}{(t+\tau)^2}
+    \leq
+    \frac{1}{t+\tau+1},
+\]
+получаем
+\[
+    h_{t+1}\leq\frac{\widetilde A_\tau}{t+\tau+1}.
+\]
+Индукция замкнута.
+Так сохраняется порядок $O(1/t)$, а влияние децентрализации и батчирования переносится
+в константу $\widetilde A_\tau$.
+
+Смысл оценки состоит в том, что DBCFW сохраняет порядок $O(1/t)$ для выпуклой гладкой задачи,
+а нужное убывание ошибок консенсуса и отслеживания градиента обеспечивается леммами
+выше.
+Размер батча $B$ влияет на константы: увеличение числа обновляемых блоков делает шаг ближе к полному DFW, но повышает стоимость линейного оракула.
+
+\input{thesis_sections/dbcfw_technical_details}
+
+\subsection{Выводы по DBCFW}
+
+DBCFW завершает хронологию развития методов в этой работе.
+Сначала предыдущие направления использовались для ускорения FW в одной централизованной задаче.
+Затем CFW и NFW были перенесены на машинное обучение.
+После этого блочная структура позволила стохастически уменьшить стоимость линейного оракула.
+DBCFW объединяет блочную экономию вычислений с распределенной архитектурой, где данные и функции разделены между узлами.
+
+Алгоритм особенно полезен в задачах, где:
+\begin{enumerate}
+    \item допустимое множество имеет декартову блочную структуру;
+    \item линейный оракул по полному множеству слишком дорог по сравнению с блочным оракулом;
+    \item данные или функции распределены между несколькими агентами;
+    \item коммуникации между агентами ограничены сетевым графом.
+\end{enumerate}
+Таким образом, DBCFW является естественным кандидатом для крупномасштабных распределенных задач машинного обучения и сетевой оптимизации.
