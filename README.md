@@ -31,8 +31,10 @@ Materials
 
 1. PDF текста работы: [paper/MasterThesis.pdf](paper/MasterThesis.pdf)
 2. PDF слайдов: [slides/thesis_slides.pdf](slides/thesis_slides.pdf)
-3. Исходник текста работы: [paper/MasterThesis.tex](paper/MasterThesis.tex)
-4. Исходник слайдов: [slides/thesis_slides.tex](slides/thesis_slides.tex)
+3. PDF 3-minute слайдов: [slides/thesis_3min.pdf](slides/thesis_3min.pdf)
+4. Исходник текста работы: [paper/MasterThesis.tex](paper/MasterThesis.tex)
+5. Исходник слайдов: [slides/thesis_slides.tex](slides/thesis_slides.tex)
+6. Исходник 3-minute слайдов: [slides/thesis_3min.tex](slides/thesis_3min.tex)
 
 Software modules developed as part of the study
 ======================================================
