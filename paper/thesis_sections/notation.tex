@@ -8,58 +8,48 @@
 и распределенной оптимизации.
 Ниже приведено согласование обозначений, которое используется в дальнейшем тексте.
 
-\begin{longtable}{p{0.22\textwidth}p{0.70\textwidth}}
-\toprule
-Обозначение & Значение \\
-\midrule
-\endhead
-$\cX$, $D$ & допустимое множество; в транспортной задаче обычно множество путевых потоков, в ML-задаче множество параметров модели; \\
-$D_1\times\dots\times D_n$ & декартова блочная структура допустимого множества; \\
-$x$ & переменная оптимизации в общей задаче и в задачах машинного обучения; \\
-$f$ & поток по ребрам транспортной сети; также $f(x)$ обозначает целевую функцию в общей оптимизации, если это не конфликтует с контекстом; \\
-$\Psi(f)$ & потенциал Бекмана в задаче равновесного распределения транспортных потоков; \\
-$\tau(f)$ & вектор времен движения по ребрам; равен $\nabla\Psi(f)$; \\
-$\Theta$ & матрица принадлежности ребер путям, переводящая путевые потоки в потоки по ребрам; \\
-$OD$ & множество пар источник--сток; \\
-$\cP_{ij}$ & множество путей между источником $i$ и стоком $j$; \\
-$d_{ij}$ & спрос между источником $i$ и стоком $j$; \\
-$s_k^{FW}$ & решение линейного оракула Frank--Wolfe на итерации $k$; \\
-$d_k$ & направление шага; в транспортных главах не смешивается со спросом $d_{ij}$, потому что индекс и контекст различают эти величины; \\
-$\gamma_k$ & длина шага FW; \\
-$g_k$ & зазор Frank--Wolfe; \\
-$H_k$ & гессиан целевой функции в текущей точке; \\
-$N$ & в главах о NFW -- число прошлых направлений; в главе о DBCFW -- число агентов, если явно указан распределенный контекст; \\
-$B$ & размер батча блоков в DBCFW; \\
-$W_t$ & матрица смешивания коммуникационного графа; \\
-$x_t^i$ & локальная точка агента $i$ на итерации $t$; \\
-$g_t^i$ & локальная оценка градиента в градиентном отслеживании; \\
-$x_{\mathrm{avg},t}$ & средняя точка по агентам; \\
-\bottomrule
-\end{longtable}
+\begin{description}
+    \item[$\cX$, $D$] допустимое множество; в транспортной задаче обычно множество путевых потоков, в ML-задаче множество параметров модели.
+    \item[$D_1\times\dots\times D_n$] декартова блочная структура допустимого множества.
+    \item[$x$] переменная оптимизации в общей задаче и в задачах машинного обучения.
+    \item[$f$] поток по ребрам транспортной сети; также $f(x)$ обозначает целевую функцию в общей оптимизации, если это не конфликтует с контекстом.
+    \item[$\Psi(f)$] потенциал Бекмана в задаче равновесного распределения транспортных потоков.
+    \item[$\tau(f)$] вектор времен движения по ребрам; равен $\nabla\Psi(f)$.
+    \item[$\Theta$] матрица принадлежности ребер путям, переводящая путевые потоки в потоки по ребрам.
+    \item[$OD$] множество пар источник--сток.
+    \item[$\cP_{ij}$] множество путей между источником $i$ и стоком $j$.
+    \item[$d_{ij}$] спрос между источником $i$ и стоком $j$.
+    \item[$s_k^{FW}$] решение линейного оракула Frank--Wolfe на итерации $k$.
+    \item[$d_k$] направление шага; в транспортных главах не смешивается со спросом $d_{ij}$, потому что индекс и контекст различают эти величины.
+    \item[$\gamma_k$] длина шага FW.
+    \item[$g_k$] зазор Frank--Wolfe.
+    \item[$H_k$] гессиан целевой функции в текущей точке.
+    \item[$N$] в главах о NFW -- число прошлых направлений; в главе о DBCFW -- число агентов, если явно указан распределенный контекст.
+    \item[$B$] размер батча блоков в DBCFW.
+    \item[$W_t$] матрица смешивания коммуникационного графа.
+    \item[$x_t^i$] локальная точка агента $i$ на итерации $t$.
+    \item[$g_t^i$] локальная оценка градиента в градиентном отслеживании.
+    \item[$x_{\mathrm{avg},t}$] средняя точка по агентам.
+\end{description}
 
 \subsection*{Сокращения}
 \addcontentsline{toc}{subsection}{Сокращения}
 
-\begin{longtable}{p{0.18\textwidth}p{0.74\textwidth}}
-\toprule
-Сокращение & Расшифровка \\
-\midrule
-\endhead
-FW & Frank--Wolfe, метод условного градиента; \\
-CFW & Conjugate Frank--Wolfe; \\
-BFW & Bi-conjugate Frank--Wolfe; \\
-NFW & N-conjugate Frank--Wolfe; \\
-FFW & Fukushima Frank--Wolfe; \\
-WFFW & Weighted Fukushima Frank--Wolfe; \\
-BCFW & Block-Coordinate Frank--Wolfe, блочно-координатный Frank--Wolfe; \\
-SOFW & Stochastic Origin Frank--Wolfe; \\
-DFW & Decentralized Frank--Wolfe; \\
-DBCFW & Decentralized Block-Coordinate Frank--Wolfe; \\
-LMO & linear minimization oracle, линейный оракул; \\
-BPR & Bureau of Public Roads travel time function; \\
-OD & origin--destination pair, пара источник--сток. \\
-\bottomrule
-\end{longtable}
+\begin{description}
+    \item[FW] Frank--Wolfe, метод условного градиента.
+    \item[CFW] Conjugate Frank--Wolfe.
+    \item[BFW] Bi-conjugate Frank--Wolfe.
+    \item[NFW] N-conjugate Frank--Wolfe.
+    \item[FFW] Fukushima Frank--Wolfe.
+    \item[WFFW] Weighted Fukushima Frank--Wolfe.
+    \item[BCFW] Block-Coordinate Frank--Wolfe, блочно-координатный Frank--Wolfe.
+    \item[SOFW] Stochastic Origin Frank--Wolfe.
+    \item[DFW] Decentralized Frank--Wolfe.
+    \item[DBCFW] Decentralized Block-Coordinate Frank--Wolfe.
+    \item[LMO] linear minimization oracle, линейный оракул.
+    \item[BPR] Bureau of Public Roads travel time function.
+    \item[OD] origin--destination pair, пара источник--сток.
+\end{description}
 
 \subsection*{Линия развития методов}
 

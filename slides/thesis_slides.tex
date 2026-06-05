@@ -1,407 +1,398 @@
-\documentclass{beamer}
-\beamertemplatenavigationsymbolsempty
-\usecolortheme{beaver}
-\setbeamertemplate{blocks}[rounded=true, shadow=true]
-\setbeamertemplate{footline}[page number]
+\documentclass[10pt,pdf,hyperref={unicode}]{beamer}
+
+\mode<presentation>
+{
+    \usetheme{boxes}
+    \beamertemplatenavigationsymbolsempty
+    \setbeamertemplate{footline}[page number]
+    \usecolortheme{seagull}
+    \setbeamersize{text margin left=0.7em, text margin right=0.7em}
+}
 
 \usepackage[T2A]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage[english,russian]{babel}
-\usepackage{amssymb,amsfonts,amsmath,mathtools,mathtext}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{indentfirst}
+\usepackage{ragged2e}
 \usepackage{subfig}
-\usepackage{array}
-\usepackage{multicol}
-\usepackage{hyperref}
-\usepackage{hhline}
-\usepackage[dvipsnames]{xcolor}
-\usepackage{tikz}
-\usetikzlibrary{arrows.meta, positioning, calc, shapes}
 
-\graphicspath{ {../paper/thesis_assets/figures/} }
+\graphicspath{{../paper/thesis_assets/figures/}}
 
-\newtheorem{theorem_rus}{Теорема}
-\newtheorem{lemma_rus}{Лемма}
-\newtheorem{proposition_rus}{Утверждение}
-\setbeamertemplate{theorems}[numbered]
-
-% Математические макросы
-\DeclareMathOperator*{\argmin}{arg\,min}
-\DeclareMathOperator*{\argmax}{arg\,max}
-\DeclareMathOperator{\diam}{diam}
-\DeclareMathOperator{\diag}{diag}
+\newtheorem{rustheorem}{Теорема}
 \newcommand{\R}{\mathbb{R}}
 \newcommand{\E}{\mathbb{E}}
 \newcommand{\cX}{\mathcal{X}}
-\newcommand{\cF}{\mathcal{F}}
-\newcommand{\cP}{\mathcal{P}}
-\newcommand{\cD}{\mathcal{D}}
-\newcommand{\cI}{\mathcal{I}}
 \newcommand{\norm}[1]{\left\|#1\right\|}
-\newcommand{\inner}[2]{\left\langle #1, #2 \right\rangle}
-\newcommand{\Min}{\min\limits}
-\newcommand{\Max}{\max\limits}
+\newcommand{\inner}[2]{\left\langle #1,#2 \right\rangle}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
 
-\title[\hbox to 56mm{Алгоритм Frank--Wolfe в машинном обучении}]{Алгоритм Frank--Wolfe\\ в задачах машинного обучения}
-\author[И.\,Н.~Игнашин]{Игорь Николаевич Игнашин\\
-\small Научный руководитель: к.\,ф.-м.\,н. А.\,О.~Грабовой}
-\institute{Кафедра интеллектуальных систем ФПМИ МФТИ\\
-Специализация: Интеллектуальный анализ данных}
-\date{Москва, 2026}
+\newcommand{\PresentationTitle}{Приложения алгоритма Франк-Вульфа к задачам машинного обучения}
+\newcommand{\PresentationShortTitle}{Frank--Wolfe в ML}
+\newcommand{\PresentationAuthor}{Игнашин Игорь Николаевич}
+\newcommand{\PresentationInstitute}{Московский физико-технический институт}
+\newcommand{\PresentationProgram}{09.04.01 Информатика и вычислительная техника}
+\newcommand{\PresentationSupervisor}{Научный руководитель: д.ф.-м.н. Грабовой А. О.}
+\newcommand{\PresentationPlaceDate}{Москва, 2026}
+
+\title[\PresentationShortTitle]{\PresentationTitle}
+\author{\large \PresentationAuthor}
+\institute{\large
+\PresentationInstitute\\
+~\\
+\footnotesize{\PresentationProgram\\
+~\\
+\PresentationSupervisor}
+}
+\date{\footnotesize{\PresentationPlaceDate}}
 
 \begin{document}
 
-% =====================================================================
-% 1. Титул
-% =====================================================================
 \begin{frame}
-\thispagestyle{empty}
-\maketitle
+    \titlepage
 \end{frame}
 
-% =====================================================================
-% 2. Положения, выносимые на защиту
-% =====================================================================
-\begin{frame}{Положения, выносимые на защиту}
-    \footnotesize
-    \begin{enumerate}
-        \item Систематизированы модификации Frank--Wolfe по трем направлениям: использование предыдущих направлений, стохастические LMO на примере SOFW и расширение на децентрализованную постановку.
-        \item Для модели Бекмана предложены NFW как обобщение CFW/BFW на $N$ прошлых направлений и WFFW как модификация FFW с экспоненциальным сглаживанием.
-        \item CFW и NFW перенесены на ML-задачи без явного гессиана: кривизна аппроксимируется разностями градиентов.
-        \item Для CFW доказана оценка по минимальному зазору Frank--Wolfe того же порядка, что у базового FW.
-        \item Предложен SOFW как частный случай BCFW для транспортной задачи с блоками по OD-парам; доказана оценка ожидаемой сходимости для одиночного и батчевого выбора блоков.
-        \item Предложен DBCFW: децентрализованный блочно-координатный FW с консенсусом и отслеживанием градиента; получена оценка сходимости порядка $O(1/t)$.
-    \end{enumerate}
+\begin{frame}{Почему Frank--Wolfe}
+\justifying
+Во многих задачах машинного обучения и сетевой оптимизации требуется решать
+\[
+    \min_{x\in\cX} f(x),
+\]
+где множество $\cX$ имеет простую линейную оптимизацию, но дорогую евклидову проекцию.
+
+\bigskip
+
+\begin{block}{Идея метода условного градиента}
+На каждой итерации вместо проекции решается линейная подзадача
+\[
+    s_k\in\argmin_{s\in\cX}\inner{\nabla f(x_k)}{s},
+    \qquad
+    x_{k+1}=x_k+\gamma_k(s_k-x_k).
+\]
+\end{block}
+
+\vspace{0.2cm}
+Это делает Frank--Wolfe естественным инструментом для $l_1$-ограничений, симплексов,
+транспортных политопов и блочных произведений множеств.
 \end{frame}
 
-% =====================================================================
-% 3. Общая постановка
-% =====================================================================
-\begin{frame}{Постановка задачи}
-    \small
-    \vspace{-1mm}
-    Рассматривается гладкая выпуклая задача на компактном выпуклом множестве:
-    \[
-        f(x) \to \min_{x\in\cX}.
-    \]
-    Метод Frank--Wolfe заменяет проекцию линейным оракулом:
-    \[
-        s_k^{FW}\in \argmin_{s\in\cX}\inner{\nabla f(x_k)}{s},
-        \qquad
-        d_k^{FW}=s_k^{FW}-x_k,
-    \]
-    \[
-        x_{k+1}=x_k+\gamma_k d_k^{FW},
-        \qquad
-        \gamma_k\in[0,1].
-    \]
-    \begin{block}{Основной вопрос}
-        Как сохранить проекционно-свободную структуру FW и ускорить практическую сходимость за счет направления, стохастического LMO и распределенной архитектуры?
-    \end{block}
-    \vspace{-1mm}
-    Качество итерации измеряется зазором
-    \[
-        g_k=\inner{\nabla f(x_k)}{x_k-s_k^{FW}}.
-    \]
+\begin{frame}{Главное ограничение базового FW}
+\justifying
+Классический Frank--Wolfe проекционно-свободен, но не решает все вычислительные проблемы.
+
+\bigskip
+
+\begin{columns}[T]
+\begin{column}{0.32\textwidth}
+\textbf{Направление}\\
+Зигзагообразность траектории около границы допустимого множества.
+\end{column}
+\begin{column}{0.32\textwidth}
+\textbf{Оракул}\\
+Полный линейный оракул может быть дорогим на крупных блочных задачах.
+\end{column}
+\begin{column}{0.32\textwidth}
+\textbf{Данные}\\
+Функция и данные могут быть распределены между агентами сети.
+\end{column}
+\end{columns}
+
+\bigskip
+
+\begin{block}{Линия работы}
+Модификации FW рассматриваются как способы ускорить разные части одной итерации:
+выбор направления, вызов линейного оракула и коммуникацию.
+\end{block}
 \end{frame}
 
-% =====================================================================
-% 4. Модель Бекмана и линейный оракул
-% =====================================================================
-\begin{frame}{Транспортная модель Бекмана}
-    \small
-    \vspace{-2mm}
-    Для дорожной сети поток по ребрам $f=\Theta x$ находится из задачи
-    \[
-        \Psi(f)=\sum_{e\in\mathcal{E}}\int_0^{f_e}\tau_e(z)\,dz
-        \to
-        \min_{f=\Theta x,\;x\in X},
-        \qquad
-        \nabla\Psi(f)=\tau(f).
-    \]
-    Допустимое множество имеет блочную структуру по OD-парам:
-    \[
-        X=\prod_{w\in OD}X^w,\qquad
-        X^w=\left\{x^w:\sum_{p\in\cP_w}x_p=d_w,\;x_p\ge 0\right\}.
-    \]
-    Линейный оракул сводится к поиску кратчайших путей для OD-пар.
-    \vspace{-1mm}
-    \begin{figure}
-    \centering
-    \resizebox{0.88\linewidth}{!}{%
-    \begin{tikzpicture}[
-        >=Stealth, thick, font=\small,
-        box/.style={draw, rounded corners=8pt, align=center, inner sep=7pt, minimum width=3.6cm, minimum height=1.15cm},
-        lbl/.style={font=\footnotesize, align=center}
-    ]
-        \node[box] (flow) at (0, 0) {Потоки $f^k$\\и времена $\tau(f^k)$};
-        \node[box] (lmo) at (5.2, 0) {LMO: кратчайшие пути\\all-or-nothing};
-        \node[box] (dir) at (10.4, 0) {Направление\\$d_k=s_k-f^k$};
-        \node[box] (upd) at (5.2, -2.4) {Линейный поиск\\$f^{k+1}=f^k+\gamma_k d_k$};
+\begin{frame}{Структура результатов}
+\justifying
+В работе объединены четыре связанных направления.
 
-        \draw[->] (flow.east) -- (lmo.west);
-        \draw[->] (lmo.east) -- (dir.west);
-        \draw[->] (dir.south) |- (upd.east);
-        \draw[->] (upd.west) -| (flow.south);
+\begin{enumerate}
+    \item Модификации FW с памятью о предыдущих направлениях в транспортной задаче.
+    \item Перенос CFW и NFW на гладкие задачи машинного обучения.
+    \item Стохастический блочно-координатный FW для транспортных сетей.
+    \item Децентрализованный блочно-координатный FW для распределенной оптимизации.
+\end{enumerate}
 
-        \node[lbl, below=1pt] at ($(upd.west)!0.5!(flow.south)$) {$k\leftarrow k+1$};
-    \end{tikzpicture}%
-    }
-    \end{figure}
+\bigskip
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Узкое место & Метод & Результат \\
+\midrule
+направление & CFW/NFW & гарантия по FW-зазору \\
+полный LMO & SOFW/BCFW & $O(1/k)$ в ожидании \\
+коммуникации + LMO & DBCFW & $O(1/t)$ для $x_{\mathrm{avg},t}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
 \end{frame}
 
-% =====================================================================
-% 5. Модификации направления
-% =====================================================================
-\begin{frame}{Модификации направления Frank--Wolfe}
-    \footnotesize
-    Классический FW использует только текущий оракул $s_k^{FW}$. Модификации добавляют память о предыдущих направлениях.
-    \vspace{1.5mm}
+\begin{frame}{Цель и задачи}
+\justifying
+\textbf{Цель:} развить и теоретически обосновать модификации Frank--Wolfe для задач,
+где стоимость линейного оракула, выбора направления или коммуникации определяет
+практическую эффективность метода.
 
-    \textbf{Conjugate Frank--Wolfe}
-    \[
-        s_k=\alpha s_k^{FW}+(1-\alpha)s_{k-1},
-        \qquad
-        (d^{k-1})^\top \nabla^2\Psi(f^k)d^k=0.
-    \]
-    \vspace{-2mm}
+\bigskip
 
-    \textbf{N-conjugate Frank--Wolfe}
-    \[
-        s_k=\alpha_0s_k^{FW}+\sum_{j=1}^{N}\alpha_js_{k-j},
-        \qquad
-        (d^k)^\top\nabla^2\Psi(f^k)d^{k-j}=0.
-    \]
-    \vspace{-2mm}
-
-    \textbf{Fukushima и Weighted Fukushima FW}
-    \[
-        s_k=\alpha_0s_k^{FW}+(1-\alpha_0)\sum_{j=1}^{N} w_js_{k-j},
-        \qquad
-        w_j\propto (1-\eta)\eta^{j-1}.
-    \]
-    В модели Бекмана $\nabla^2\Psi(f)$ диагонален, поэтому коэффициенты направлений вычисляются дешево.
+\textbf{Задачи:}
+\begin{enumerate}
+    \item Сформулировать CFW/NFW для гладкой выпуклой задачи на компактном множестве.
+    \item Получить оценку сходимости CFW по зазору Frank--Wolfe.
+    \item Описать SOFW как стохастический блочно-координатный FW и вывести оценку в ожидании.
+    \item Сформулировать DBCFW и доказать оценку сходимости для средней точки сети.
+    \item Проверить практический эффект на ML-задачах и транспортных сетях.
+\end{enumerate}
 \end{frame}
 
-% =====================================================================
-% 6. Эксперименты: транспортные сети
-% =====================================================================
-\begin{frame}{Транспортные сети: эффект памяти о направлениях}
-    \vspace{-2mm}
-    \begin{figure}
-        \centering
-        \includegraphics[width=0.96\linewidth]{fw_modifications/0_NFW.pdf}
-    \end{figure}
-    \vspace{-3mm}
-    \begin{center}
-        NFW с памятью о нескольких направлениях часто уменьшает относительный зазор быстрее BFW и отдельных вариантов FW. Выигрыш особенно заметен после первых итераций, когда базовый FW начинает зигзагообразное движение.
-    \end{center}
+\begin{frame}{CFW и NFW: память о направлениях}
+\justifying
+В CFW новое направление строится как комбинация текущего FW-направления и предыдущего направления:
+\[
+    d_k
+    =
+    \alpha d_k^{FW}
+    +
+    (1-\alpha)(1-\gamma_{k-1})d_{k-1}.
+\]
+
+\bigskip
+
+\begin{block}{Что это дает}
+\begin{itemize}
+    \item направление учитывает локальную геометрию траектории;
+    \item NFW обобщает эту идею на несколько прошлых направлений;
+    \item для ML-задач произведение на гессиан заменяется конечными разностями градиентов.
+\end{itemize}
+\end{block}
+
+\[
+    \nabla^2 f(x_k)d_{k-1}
+    \approx
+    \nabla f(x_k)-\nabla f(x_{k-1}).
+\]
 \end{frame}
 
-% =====================================================================
-% 7. CFW в машинном обучении
-% =====================================================================
-\begin{frame}{CFW в задачах машинного обучения}
-    В ML-задачах явный гессиан часто слишком дорогой. Поэтому произведение гессиана на предыдущее направление заменяется разностью градиентов:
-    \[
-        \nabla^2 f(x_k)(s_{k-1}-x_{k-1})
-        \approx
-        \frac{\nabla f(x_k)-\nabla f(x_{k-1})}{\gamma_{k-1}}.
-    \]
-    После сокращения $\gamma_{k-1}$ коэффициент CFW вычисляется как
-    \[
-        \alpha=
-        \frac{(x_k-s_{k-1})^\top(\nabla f(x_k)-\nabla f(x_{k-1}))}
-        {(s_k^{FW}-s_{k-1})^\top(\nabla f(x_k)-\nabla f(x_{k-1}))}.
-    \]
-    \begin{block}{Экспериментальная постановка}
-        Логистическая регрессия на Mushrooms и MNIST:
-        \[
-            \norm{w}_1\le R,
-            \qquad
-            f(w)=\operatorname{logloss}(w)+\frac{\lambda}{2}\norm{w}_2^2.
-        \]
-    \end{block}
+\begin{frame}{Теоретический результат для CFW}
+\justifying
+Пусть $\cX$ выпукло и компактно, а $f$ выпукла и имеет $L$-липшицев градиент на $\cX$.
+FW-зазор:
+\[
+    g_k=\inner{\nabla f(x_k)}{x_k-s_k^{FW}}.
+\]
+
+\begin{rustheorem}
+Для CFW с параметром $\alpha_0\in(0,1]$ и точным линейным поиском
+\[
+    g_N^\ast=\min_{1\leq k\leq N}g_k
+    \leq
+    \frac{\max\{2h_0,LR^2\}}{\alpha_0\sqrt{N+1}}.
+\]
+\end{rustheorem}
+
+\vspace{0.15cm}
+Итог: CFW сохраняет стандартный порядок сходимости по зазору, но может улучшать
+практическое направление шага.
 \end{frame}
 
-% =====================================================================
-% 8. Теорема CFW и эксперименты ML
-% =====================================================================
-\begin{frame}{Теорема 1. Сходимость CFW}
-    \footnotesize
-    \vspace{-2mm}
-    \begin{theorem_rus}[Оценка по зазору Frank--Wolfe]
-        Пусть $\cX\subset\R^d$ выпукло и компактно, $f$ выпукла, непрерывно дифференцируема и имеет $L$-липшицев градиент на $\cX$. Тогда для CFW с параметром $\alpha_0\in(0,1]$
-        \[
-            g_N^\ast=\Min_{1\le k\le N}g_k
-            \le
-            \frac{\max\{2h_0,LR^2\}}{\alpha_0\sqrt{N+1}},
-            \quad
-            h_0=f(x_0)-f(x^\ast).
-        \]
-    \end{theorem_rus}
-    Оценка сохраняет порядок классического FW по минимальному зазору; отличие входит через контролируемый параметр $\alpha_0$.
-    \vspace{-1mm}
-    \begin{figure}
-        \centering
-        \includegraphics[width=0.72\linewidth]{cfw_ml/Experiment_5_fig_12.pdf}
-    \end{figure}
+\begin{frame}{Эксперименты в машинном обучении}
+\justifying
+Рассматривалась логистическая регрессия с ограничением на $l_1$-норму.
+Сравнивались FW, FW с линейным поиском, CFW и NFW.
+
+\bigskip
+
+\begin{center}
+\includegraphics[height=0.50\textheight,keepaspectratio]{cfw_ml/Experiment_3_fig_1.pdf}
+\end{center}
+
+\vspace{-0.15cm}
+\footnotesize
+CFW/NFW особенно полезны, когда активное ограничение создает зигзагообразное поведение базового FW.
 \end{frame}
 
-% =====================================================================
-% 9. SOFW
-% =====================================================================
-\begin{frame}{SOFW как BCFW в транспортной задаче}
-    \vspace{-2mm}
-    Предложен SOFW как частный случай BCFW для транспортной задачи с блочной структурой по OD-парам. Полный LMO требует запускать кратчайшие пути для всех блоков, а SOFW обновляет только случайный блок:
-    \[
-        w_k\sim \operatorname{Unif}(OD),
-        \qquad
-        s_k^{[w_k]}\in
-        \argmin_{u\in X^{w_k}}\inner{\nabla\Psi(F(x_k))}{F(u^{[w_k]})}.
-    \]
-    \[
-        x_{k+1}=x_k+\gamma_k(s_k^{[w_k]}-x_k^{[w_k]}).
-    \]
-    Батчевый вариант выбирает подмножество $\cI_k$ размера $m$:
-    \[
-        d_k=\frac{1}{m}\sum_{w\in\cI_k}(s_k^{[w]}-x_k^{[w]}).
-    \]
-    \begin{block}{Компромисс}
-        Полный FW дает более точное направление, но дорогую итерацию. SOFW как BCFW для транспортной сети уменьшает стоимость итерации и выигрывает по времени на крупных графах.
-    \end{block}
+\begin{frame}{SOFW: блочный оракул для транспортных сетей}
+\justifying
+В модели Бекмана допустимое множество имеет блочную структуру по OD-парам или источникам.
+Полная итерация FW требует решать задачи кратчайших путей для всех источников.
+
+\[
+    \mathcal{C}_{FW}
+    =
+    \mathcal{O}\bigl(n(E+V\log V)\bigr).
+\]
+
+\begin{block}{Stochastic Origin Frank--Wolfe}
+На каждой итерации выбирается только часть блоков, и линейный оракул решается
+для выбранных источников:
+\[
+    \mathcal{C}_{SOFW}
+    =
+    \mathcal{O}\bigl(\alpha n(E+V\log V)\bigr).
+\]
+\end{block}
+
+Цена ускорения: нужно хранить разложение потока по источникам и учитывать
+дисперсию стохастического направления.
 \end{frame}
 
-% =====================================================================
-% 10. Теорема SOFW и результаты
-% =====================================================================
-\begin{frame}{Теорема 2. Оценка SOFW}
-    \footnotesize
-    \vspace{-2mm}
-    \begin{theorem_rus}[Сходимость батчевого SOFW]
-        Пусть $\{x_k\}$ порождается батчевым SOFW, $|OD|$ -- число блоков, а
-        \[
-            \gamma_k=\frac{2|OD|}{k+2|OD|}.
-        \]
-        Тогда
-        \[
-            \E[\Psi(F(x_k))]-\Psi(F(x^\ast))
-            \le
-            \frac{2|OD|}{k+2|OD|}
-            \left[
-                C_\Psi^\otimes+\Psi(F(x_0))-\Psi(F(x^\ast))
-            \right].
-        \]
-        Для достижения $\varepsilon$-точности в ожидании достаточно
-        $\mathcal{O}(|OD|/\varepsilon)$ итераций.
-    \end{theorem_rus}
-    \vspace{-2mm}
-    \begin{figure}
-        \centering
-        \includegraphics[width=0.54\linewidth]{scfw/Philadelphia.pdf}
-    \end{figure}
+\begin{frame}{Теоретический результат для SOFW}
+\justifying
+Для батчевого SOFW направление строится по случайному подмножеству блоков $\mathcal{I}_k$:
+\[
+    d_k=\frac{1}{m}\sum_{w\in\mathcal{I}_k}(s_k^{[w]}-x_k^{[w]}).
+\]
+
+\begin{rustheorem}
+При шаге
+\[
+    \gamma_k=\frac{2|OD|}{k+2|OD|}
+\]
+выполнена оценка
+\[
+    \E[\Psi(F(x_k))]-\Psi(F(x^\ast))
+    \leq
+    \frac{2|OD|}{k+2|OD|}
+    \left(C_\Psi^\otimes+\Psi(F(x_0))-\Psi(F(x^\ast))\right).
+\]
+\end{rustheorem}
+
+Итог: стохастизация уменьшает стоимость итерации, не меняя порядок гарантии.
 \end{frame}
 
-% =====================================================================
-% 11. DBCFW
-% =====================================================================
-\begin{frame}{DBCFW: блочный FW в распределенной оптимизации}
-    \footnotesize
-    \vspace{-1mm}
-    Распределенная задача:
+\begin{frame}{SOFW: вычислительный эффект}
+\justifying
+Эксперименты проводились на транспортных сетях из открытого репозитория
+TransportationNetworks. Сравнивались FW, SOFW и взвешенный SOFW-w.
+
+\begin{center}
+\includegraphics[height=0.56\textheight,keepaspectratio]{scfw/chicago-regional.pdf}
+\end{center}
+
+\vspace{-0.1cm}
+\footnotesize
+На крупных сетях стохастический оракул быстрее уменьшает относительный зазор
+при одинаковом вычислительном бюджете.
+\end{frame}
+
+\begin{frame}{DBCFW: распределенная постановка}
+\justifying
+Пусть есть $N$ агентов, и агент $i$ знает только локальную функцию $f_i$:
+\[
+    \min_{x\in D} f(x),
+    \qquad
+    f(x)=\frac{1}{N}\sum_{i=1}^{N} f_i(x),
+    \qquad
+    D=D_1\times\dots\times D_n.
+\]
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\textbf{Децентрализация}
+\begin{itemize}
+    \item локальная копия $x_t^i$;
+    \item обмен только с соседями;
+    \item матрица смешивания $W_t$.
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+\textbf{Блочность}
+\begin{itemize}
+    \item выбирается батч блоков $I_t^i$;
+    \item LMO решается на $D_t^i$;
+    \item стоимость зависит от размера батча.
+\end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Алгоритм DBCFW}
+\justifying
+На каждой итерации агент выполняет три шага.
+
+\begin{enumerate}
+    \item \textbf{Консенсус по точкам}
     \[
-        f(x)=\frac{1}{N}\sum_{i=1}^{N} f_i(x)\to\min_{x\in D_1\times\dots\times D_n}.
+        \tilde x_t^i=\sum_j (W_t)_{ij}x_t^j.
     \]
-    Агент $i$ смешивает точки и оценки градиента:
+    \item \textbf{Отслеживание градиента}
     \[
-        \tilde x_t^i=\sum_{j=1}^{N}(W_t)_{ij}x_t^j,
-        \qquad
         g_t^i=\tilde g_{t-1}^i+\nabla f_i(\tilde x_t^i)-\nabla f_i(\tilde x_{t-1}^i),
+        \qquad
+        \tilde g_t^i=\sum_j(W_t)_{ij}g_t^j.
     \]
-    \[
-        \tilde g_t^i=\sum_{j=1}^{N}(W_t)_{ij}g_t^j.
-    \]
-    Затем выбирается батч блоков $I_t^i$ и суженное множество
-    \[
-        D_t^i=
-        \left(\prod_{k\in I_t^i}D_k\right)
-        \times
-        \left(\prod_{k\notin I_t^i}\{\tilde x_t^i[k]\}\right),
-    \]
-    Блочный LMO:
+    \item \textbf{Блочный линейный оракул}
     \[
         v_t^i\in\argmin_{v\in D_t^i}\inner{\tilde g_t^i}{v},
         \qquad
         x_{t+1}^i=(1-\gamma_t)\tilde x_t^i+\gamma_t v_t^i.
     \]
+\end{enumerate}
 \end{frame}
 
-% =====================================================================
-% 12. Теорема DBCFW и карта методов
-% =====================================================================
-\begin{frame}{Теорема 3. Сходимость DBCFW}
-    \scriptsize
-    \vspace{-2mm}
-    \begin{theorem_rus}[Оценка для среднего итерата]
-        Пусть выполнены условия смешивания, гладкости и ограниченности области. Пусть число блоков равно $n$, размер батча $1\le B\le n$,
-        \[
-            \tau=\frac{2n}{B},
-            \qquad
-            \gamma_t=\frac{2n}{B(t+\tau)}.
-        \]
-        Если консенсусная ошибка и ошибка градиентного отслеживания убывают как $O(1/t)$, то
-        \[
-            \E[f(x_{\mathrm{avg},t})-f(x^\ast)]
-            \le
-            \frac{\widetilde A_\tau}{t+\tau}.
-        \]
-    \end{theorem_rus}
-    \vspace{-2mm}
-    \begin{figure}
-    \centering
-    \resizebox{0.72\linewidth}{!}{%
-    \begin{tikzpicture}[
-        >=Stealth, thick, font=\small,
-        box/.style={draw, rounded corners=8pt, align=center, inner sep=5pt, minimum width=3.1cm, minimum height=0.9cm},
-        lbl/.style={font=\footnotesize, align=center}
-    ]
-        \node[box] (fw) at (0, 0) {FW};
-        \node[box] (bcfw) at (4.3, 0) {BCFW / SOFW\\случайные блоки};
-        \node[box] (dfw) at (0, -1.55) {DFW\\консенсус};
-        \node[box] (dbcfw) at (4.3, -1.55) {DBCFW\\блоки + консенсус};
+\begin{frame}{Теоретический результат для DBCFW}
+\justifying
+При стандартных предположениях о гладкости, выпуклости, компактности $D$ и
+сжатии коммуникационной ошибки получена рекурсия для средней точки сети:
+\[
+    h_t=\E[f(x_{\mathrm{avg},t})-f(x^\ast)].
+\]
 
-        \draw[->] (fw.east) -- (bcfw.west);
-        \draw[->] (fw.south) -- (dfw.north);
-        \draw[->] (bcfw.south) -- (dbcfw.north);
-        \draw[->] (dfw.east) -- (dbcfw.west);
-    \end{tikzpicture}%
-    }
-    \end{figure}
-    Если $B=n$, DBCFW переходит в DFW; без децентрализации остается блочный FW.
+\begin{rustheorem}
+При шаге
+\[
+    \gamma_t=\frac{2n}{B(t+\tau)},\qquad \tau=\frac{2n}{B},
+\]
+выполнено
+\[
+    h_t\leq \frac{\widetilde A_\tau}{t+\tau},
+    \qquad
+    \E[f(x_{\mathrm{avg},t})-f(x^\ast)]=O(1/t).
+\]
+\end{rustheorem}
+
+Влияние консенсуса, gradient tracking и размера батча входит в константу,
+но не ухудшает порядок сходимости.
 \end{frame}
 
-% =====================================================================
-% 13. Личный вклад
-% =====================================================================
-\begin{frame}{Личный вклад автора}
-    \begin{itemize}
-        \item \textbf{Систематизация.} Модификации FW представлены как единая линия проекционно-свободных методов для транспортных, ML и распределенных задач.
-        \item \textbf{Методы.} Предложены NFW и WFFW как расширения BFW и FFW; предложены SOFW для транспортных OD-блоков и DBCFW для распределенной блочной оптимизации.
-        \item \textbf{Теория.} Доказаны оценка CFW по зазору Frank--Wolfe, оценка ожидаемой сходимости SOFW и оценка $O(1/t)$ для DBCFW.
-        \item \textbf{Эксперименты.} Проведено сравнение FW-модификаций на транспортных сетях, Mushrooms и MNIST; показаны выигрыш алгоритмов, использующих предыдущие направления, и trade-off между качеством шага и вычислительной сложностью стохастического блочно-координатного LMO.
-    \end{itemize}
-\end{frame}
+\begin{frame}{Основные результаты и публикации}
+\justifying
+\begin{columns}[T]
+\begin{column}{0.58\textwidth}
+\textbf{Результаты}
+\begin{enumerate}
+    \item CFW/NFW перенесены на ML без явного гессиана.
+    \item Для CFW доказано $g_N^\ast=O(N^{-1/2})$.
+    \item Для SOFW получено $O(1/k)$ в ожидании.
+    \item Для DBCFW доказано
+    $\E[f(x_{\mathrm{avg},t})-f(x^\ast)]=O(1/t)$.
+    \item Эксперименты подтверждают выигрыш CFW/NFW и SOFW.
+\end{enumerate}
+\end{column}
+\begin{column}{0.38\textwidth}
+\textbf{Публикации}
+\begin{itemize}
+    \item КИМ, 2024: модификации FW для транспортных потоков.
+    \item Journal of Mathematical Sciences, 2025: SOFW для traffic assignment.
+\end{itemize}
 
-% =====================================================================
-% 14. Спасибо
-% =====================================================================
-\begin{frame}
-    \vspace{1.5cm}
-    \begin{center}
-        {\Large \textbf{Спасибо за внимание!}}
-        \vspace{1cm}
-
-        \large Готов ответить на вопросы.
-    \end{center}
+\vspace{0.2cm}
+\textbf{Дальше}
+\begin{itemize}
+    \item DBCFW на распределенных ML-задачах;
+    \item блочные кривизны в константах;
+    \item NFW + стохастические блоки.
+\end{itemize}
+\end{column}
+\end{columns}
 \end{frame}
 
 \end{document}
